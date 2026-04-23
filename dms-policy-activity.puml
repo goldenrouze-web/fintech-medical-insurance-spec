@@ -1,71 +1,107 @@
-@startuml IssueDMS_Policy
+@startuml IssueDMS_Policy_v2
+!define RECTANGLE class
+
 skinparam backgroundColor #FAFAFA
 skinparam activity {
   BackgroundColor #E1F5FE
   BorderColor #0277BD
-  FontSize 11
+  FontSize 10
+  FontName Arial
 }
 skinparam decision {
   BackgroundColor #FFF3E0
   BorderColor #F57C00
+  FontSize 10
 }
-title Процесс выдачи полиса ДМС
+skinparam note {
+  BackgroundColor #E8F5E8
+  BorderColor #4CAF50
+}
+
+title Процесс выдачи полиса ДМС v2.0\n(с полной обработкой ошибок)
 
 |Клиент|
 start
-:Получить заявку на ДМС;
-:Проверить полноту данных;
+:1. Получить заявку ДМС\n(JSON/FORM API);
+note right: ФИО, паспорт, email,\nвозраст, регион, опции
 
-if (Данные полные?) then (да)
-  |Система|
+|Система|
+:2. Валидация данных\n(схема JSON Schema);
+if (2.1 Данные полные?) then (✓)
   fork
     |Сервис идентификации|
-    :Проверить/создать профиль клиента;
-    if (Клиент найден/создан?) then (да)
-    else (ошибка)
-      :Отправить ошибку создания профиля;
-      kill
+    :3.1 Проверить профиль\n(по ФИО+паспорт+email);
+    if (3.2 Профиль OK?) then (✓)
+      :3.3 Вернуть client_id;
+    else (✗)
+      :3.4 Создать профиль;
+      if (3.5 Создан?) then (✓)
+        :3.6 Вернуть client_id;
+      else (✗ Дубли/ошибка)
+        note right: Лог + уведомление\nадминистратору
+        kill
+      endif
     endif
   fork again
     |Сервис платежей|
-    :Рассчитать премию ДМС;
+    :4.1 Рассчитать премию\n(тарифы + возраст + регион);
+    if (4.2 Расчет OK?) then (✓)
+      :4.3 Вернуть premium_amount;
+    else (✗ Сервис недоступен)
+      note right: Circuit Breaker\nRetry 3x → kill
+      kill
+    endif
   end fork
-  :Получить результат расчета;
   
-  if (Премия рассчитана?) then (да)
-    repeat
-      :Инициировать оплату;
-      |Платежный шлюз|
-      :Обработать платеж;
-      
-      if (Платеж успешен?) then (да)
-        |Сервис полисов|
-        :Генерировать полис ДМС;
-        if (Полис создан?) then (да)
-          :Отправить полис клиенту (email/PDF);
-          :Зафиксировать в реестре полисов;
-        else (ошибка генерации)
-          :Инициировать возврат средств;
-          :Отправить уведомление об ошибке;
+  :5. Сохранить сессию\n(client_id + premium);
+  
+  repeat
+    :6.1 Создать PaymentIntent\n(Stripe/YandexKassa);
+    |Платежный шлюз|
+    :6.2 Обработать платеж\n(карта/SBP/ApplePay);
+    
+    if (6.3 Платеж успешен?) then (✓)
+      |Сервис полисов|
+      :7.1 Генерировать полис PDF\n(шаблон LaTeX/Puppeteer);
+      if (7.2 Полис создан?) then (✓)
+        :7.3 Сохранить в S3;
+        :8.1 Отправить email + SMS;
+        if (8.2 Доставка OK?) then (✓)
+          :9.1 Зафиксировать в реестре;
+          :9.2 Уведомить BI-систему;
+        else (✗ bounce)
+          note right: Fallback SMS + ретри\nчерез 24ч
         endif
-        break
-      else (платеж отклонен)
-        :Отправить уведомку о неудаче;
+        detach
+      else (✗ шаблон/буфер)
+        :7.4 Refund платежа;
+        note right: Автоматический возврат\n+ уведомление
       endif
-    repeat while (Повторить оплату?) is (да -> нет)
-    :Завершить сессию;
-  else (ошибка расчета)
-    :Отправить ошибку расчета премии;
-    kill
-  endif
-else (данные неполные)
-  :Запросить недостающие данные;
-  :Ожидать дополнения;
+      break
+    else (✗ declined)
+      :6.4 Проверить код ошибки;
+      if (6.5 Retryable?) then (✓ 3DS/card error)
+        note right: Пауза 5 сек\nRetry counter++
+      else (✗ fraud/block)
+        :6.6 Блокировка клиента;
+        kill
+      endif
+    endif
+  repeat while (6.7 Retry < 3?) is (✓) 
+  -> нет;
+  
+  :10. Завершить сессию;
+  
+else (2.2 Неполные данные)
+  :2.3 Вернуть список ошибок;
+  note right: 422 Unprocessable Entity\n+ поля для исправления
   stop
 endif
 
 |Администратор|
-:Обработать критические ошибки\n(ручной режим);
+:11. Escalation критических ошибок\n(manual approval);
 
+|#AntiqueWhite|Реестр полисов|
 stop
-@enduml
+
+@enduml IssueDMS_Policy_v2
