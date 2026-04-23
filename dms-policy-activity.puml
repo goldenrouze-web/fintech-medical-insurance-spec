@@ -1,107 +1,143 @@
-@startuml IssueDMS_Policy_v2
-!define RECTANGLE class
+@startuml DMS_Policy_Issuance
+title Выдача ДМС-полиса — Activity Diagram
 
-skinparam backgroundColor #FAFAFA
-skinparam activity {
-  BackgroundColor #E1F5FE
-  BorderColor #0277BD
-  FontSize 10
-  FontName Arial
-}
-skinparam decision {
-  BackgroundColor #FFF3E0
-  BorderColor #F57C00
-  FontSize 10
-}
-skinparam note {
-  BackgroundColor #E8F5E8
-  BorderColor #4CAF50
-}
+skinparam ConditionEndStyle hline
+skinparam ActivityShape roundbox
+skinparam ActivityDiamondBackgroundColor #FFF4C2
+skinparam BackgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI"
 
-title Процесс выдачи полиса ДМС v2.0\n(с полной обработкой ошибок)
+|#E3F2FD|Клиент|
+|#FFF3E0|Frontend|
+|#E8F5E9|Система ДМС|
+|#FCE4EC|Внешние системы|
 
 |Клиент|
 start
-:1. Получить заявку ДМС\n(JSON/FORM API);
-note right: ФИО, паспорт, email,\nвозраст, регион, опции
+:Заполнение анкеты;
 
-|Система|
-:2. Валидация данных\n(схема JSON Schema);
-if (2.1 Данные полные?) then (✓)
-  fork
-    |Сервис идентификации|
-    :3.1 Проверить профиль\n(по ФИО+паспорт+email);
-    if (3.2 Профиль OK?) then (✓)
-      :3.3 Вернуть client_id;
-    else (✗)
-      :3.4 Создать профиль;
-      if (3.5 Создан?) then (✓)
-        :3.6 Вернуть client_id;
-      else (✗ Дубли/ошибка)
-        note right: Лог + уведомление\nадминистратору
-        kill
-      endif
-    endif
-  fork again
-    |Сервис платежей|
-    :4.1 Рассчитать премию\n(тарифы + возраст + регион);
-    if (4.2 Расчет OK?) then (✓)
-      :4.3 Вернуть premium_amount;
-    else (✗ Сервис недоступен)
-      note right: Circuit Breaker\nRetry 3x → kill
-      kill
-    endif
-  end fork
-  
-  :5. Сохранить сессию\n(client_id + premium);
-  
+|Frontend|
+:Валидация данных;
+
+if (Данные корректны?) then (нет)
   repeat
-    :6.1 Создать PaymentIntent\n(Stripe/YandexKassa);
-    |Платежный шлюз|
-    :6.2 Обработать платеж\n(карта/SBP/ApplePay);
-    
-    if (6.3 Платеж успешен?) then (✓)
-      |Сервис полисов|
-      :7.1 Генерировать полис PDF\n(шаблон LaTeX/Puppeteer);
-      if (7.2 Полис создан?) then (✓)
-        :7.3 Сохранить в S3;
-        :8.1 Отправить email + SMS;
-        if (8.2 Доставка OK?) then (✓)
-          :9.1 Зафиксировать в реестре;
-          :9.2 Уведомить BI-систему;
-        else (✗ bounce)
-          note right: Fallback SMS + ретри\nчерез 24ч
-        endif
-        detach
-      else (✗ шаблон/буфер)
-        :7.4 Refund платежа;
-        note right: Автоматический возврат\n+ уведомление
-      endif
-      break
-    else (✗ declined)
-      :6.4 Проверить код ошибки;
-      if (6.5 Retryable?) then (✓ 3DS/card error)
-        note right: Пауза 5 сек\nRetry counter++
-      else (✗ fraud/block)
-        :6.6 Блокировка клиента;
-        kill
-      endif
-    endif
-  repeat while (6.7 Retry < 3?) is (✓) 
-  -> нет;
-  
-  :10. Завершить сессию;
-  
-else (2.2 Неполные данные)
-  :2.3 Вернуть список ошибок;
-  note right: 422 Unprocessable Entity\n+ поля для исправления
-  stop
+    |Клиент|
+    :Исправление ошибок;
+    |Frontend|
+    :Повторная валидация;
+  repeat while (Есть ошибки?) is (да) not (нет)
+else (да)
 endif
 
-|Администратор|
-:11. Escalation критических ошибок\n(manual approval);
+|Система ДМС|
+:Создание заявки;
 
-|#AntiqueWhite|Реестр полисов|
+:Проверка идемпотентности;
+
+if (Дубликат?) then (да)
+  :Возврат существующей заявки;
+  stop
+else (нет)
+endif
+
+fork
+  |Внешние системы|
+  :Андеррайтинг;
+fork again
+  |Внешние системы|
+  :KYC / антифрод;
+fork again
+  |Система ДМС|
+  :Расчет стоимости;
+end fork
+
+|Система ДМС|
+if (Ошибка интеграции?) then (да)
+  repeat
+    :Retry запросов;
+  repeat while (Попыток < 3?) is (да) not (нет)
+
+  if (Ошибка сохраняется?) then (да)
+    :Ручная обработка;
+    stop
+  else (нет)
+  endif
+else (нет)
+endif
+
+if (Андеррайтинг ок?) then (нет)
+  :Отказ;
+  stop
+else (да)
+endif
+
+if (Расчет успешен?) then (нет)
+  :Ошибка расчета;
+  stop
+else (да)
+endif
+
+:Формирование предложения;
+
+|Клиент|
+if (Согласен?) then (нет)
+  :Отмена;
+  stop
+else (да)
+  :Подпись;
+endif
+
+|Система ДМС|
+if (Подпись валидна?) then (нет)
+  repeat
+    |Клиент|
+    :Повтор подписи;
+  repeat while (Попыток < 3?) is (да) not (нет)
+
+  if (Лимит?) then (да)
+    :Блокировка;
+    stop
+  else (нет)
+  endif
+else (да)
+endif
+
+|Внешние системы|
+repeat
+  :Платеж;
+  if (Успешно?) then (да)
+  else (нет)
+    |Клиент|
+    :Ошибка оплаты;
+  endif
+repeat while (Неуспех?) is (да) not (нет)
+
+|Система ДМС|
+if (Оплата прошла?) then (нет)
+  :Не оплачено;
+  stop
+else (да)
+endif
+
+repeat
+  :Регистрация полиса;
+repeat while (Ошибка?) is (да) not (нет)
+
+:Генерация PDF;
+
+fork
+  :Email;
+fork again
+  :ЛК;
+fork again
+  :SMS;
+end fork
+
+|Клиент|
+:Получение полиса;
+
+|Система ДМС|
+:Закрытие заявки;
 stop
 
-@enduml IssueDMS_Policy_v2
+@enduml
