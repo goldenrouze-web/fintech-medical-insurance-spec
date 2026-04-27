@@ -19,7 +19,8 @@ start
 контакты, программа);
 
 |Frontend|
-:Валидация данных;
+:Первичная валидация
+(маски, обязательность);
 
 if (Данные корректны?) then (нет)
   repeat
@@ -31,137 +32,187 @@ if (Данные корректны?) then (нет)
 else (да)
 endif
 
+|Frontend|
+:POST /v1/applications
++ заголовок Idempotency-Key (UUID);
+
 |Система ДМС|
-:Создание заявки
-(ID, статус NEW);
+partition "API-слой" {
+  :Проверка Idempotency-Key
+  (Redis, TTL = 24ч);
+  if (Ключ уже видели?) then (да)
+    :Возврат сохранённого ответа
+    (application_id, status);
+    detach
+  else (нет)
+  endif
 
-:Проверка идемпотентности
-(дубль за 30 минут?);
+  :BEGIN TX;
+  :INSERT applications (status = NEW)
+  + audit_log
+  + outbox-запись application.created;
+  :COMMIT TX (~50 мс);
 
-if (Дубликат?) then (да)
-  :Возврат ссылки на существующую заявку,
-  лог события "duplicate";
-  end
-else (нет)
-endif
+  :HTTP 202 Accepted
+  + application_id
+  + Location: /v1/applications/{id}/status;
+}
 
-fork
-  |Внешние системы|
-  :Андеррайтинг
-  (риск-скор);
-fork again
-  |Внешние системы|
-  :KYC / антифрод;
-fork again
+|Frontend|
+:Поллинг GET /v1/applications/{id}/status
+(2с → 5с → 10с, jitter ±20%)
+либо SSE-подписка;
+
+|Система ДМС|
+partition "Outbox relay" {
+  :Публикация application.created
+  в Kafka topic dms.applications;
+}
+
+partition "Worker: оркестрация (saga)" {
+  :status = IN_PROGRESS
+  (короткая TX);
+
+  fork
+    |Внешние системы|
+    :Андеррайтинг
+    (мед. БД, circuit breaker,
+    timeout 8с);
+  fork again
+    |Внешние системы|
+    :KYC / антифрод
+    (circuit breaker, timeout 8с);
+  fork again
+    |Система ДМС|
+    :Расчёт стоимости
+    (внутренний сервис);
+  end fork
+
   |Система ДМС|
-  :Расчёт стоимости;
-end fork
+  if (Все сервисы ответили?) then (нет)
+    :В очередь dms.retry
+    next_attempt_at = now + 30с
+    (backoff 30с → 2м → 10м → 1ч);
+    if (Попытки исчерпаны?) then (да)
+      :status = MANUAL_REVIEW,
+      задача оператору + alert DevOps;
+      end
+    else (нет)
+      :Ждём next_attempt_at;
+      detach
+    endif
+  else (да)
+  endif
 
-|Система ДМС|
-if (Все сервисы ответили?) then (нет)
-  repeat
-    :Retry с экспоненциальной
-    задержкой 1-2-4с;
-  repeat while (Попыток < 3?) is (да) not (нет)
+  if (Андеррайтинг APPROVED
+  и KYC PASSED?) then (нет)
+    :status = REJECTED + reason_code,
+    событие application.rejected;
+    end
+  else (да)
+  endif
 
-  if (Сервис всё ещё недоступен?) then (да)
-    :Перевод заявки в MANUAL_REVIEW,
-    задача оператору, alert DevOps;
+  if (Нужен ручной разбор скоринга?) then (да)
+    :status = PENDING_MANUAL_REVIEW,
+    задача оператору в АРМ;
+    note right
+      Поток обрывается.
+      Возобновится по событию
+      manual_review.completed —
+      длительность не ограничиваем
+      (час, сутки — не важно).
+    end note
     end
   else (нет)
   endif
-else (да)
-endif
 
-if (Андеррайтинг + KYC прошли?) then (нет)
-  :Мотивированный отказ,
-  статус DECLINED, e-mail клиенту;
-  end
-else (да)
-endif
+  :Расчёт final_premium
+  (база + надбавки − скидки);
+  :status = PRICED
+  + событие application.priced;
+}
 
-if (Расчёт успешен?) then (нет)
-  :Статус CALCULATION_FAILED,
-  инцидент DevOps, уведомление клиенту;
-  end
-else (да)
-endif
-
-:Формирование предложения
-(PDF-черновик с условиями);
+|Frontend|
+:Поллинг видит status = PRICED
+→ экран оплаты;
 
 |Клиент|
-if (Согласен с условиями?) then (нет)
-  |Система ДМС|
-  :Закрытие заявки CANCELLED_BY_CLIENT,
-  фиксация причины;
-  end
-else (да)
-  |Клиент|
-  :Электронное подписание
-  (СМС-код / ЭЦП);
-endif
-
-|Система ДМС|
-if (Подпись валидна?) then (нет)
-  repeat
-    |Клиент|
-    :Повторный ввод кода;
-    |Система ДМС|
-    :Проверка подписи;
-  repeat while (Подпись невалидна
-  и попыток < 3?) is (да) not (нет)
-
-  if (Лимит исчерпан?) then (да)
-    :Блокировка BLOCKED_SECURITY,
-    инцидент SecOps;
-    end
-  else (нет)
-  endif
-else (да)
-endif
+:Подтверждение оплаты
+(переход в платёжный шлюз);
 
 |Внешние системы|
-repeat
-  :Платёж в шлюзе
-  (создание сессии, webhook);
-  if (Успешно?) then (да)
-  else (нет)
-    |Клиент|
-    :Уведомление об ошибке оплаты,
-    выбор другого способа;
-  endif
-repeat while (Неуспех и попыток < 3?) is (да) not (нет)
+:Платёжный шлюз
+(3DS, списание);
 
 |Система ДМС|
-if (Оплата прошла?) then (нет)
-  :Статус PAYMENT_FAILED,
-  освобождение тарифов, e-mail клиенту;
-  end
-else (да)
-endif
+partition "Платёжный callback" {
+  :POST /v1/payments/callback
+  (HMAC-SHA256, идемпотентно
+  по payment_id);
+  if (Подпись валидна?) then (нет)
+    :HTTP 401, инцидент в журнал;
+    end
+  else (да)
+  endif
+  :status = PAID
+  + событие payment.confirmed;
+}
 
-repeat
-  :Регистрация полиса в реестре
-  (ЕГИС ДМС, серия + номер);
-repeat while (Регистрация успешна?) is (нет — повтор) not (да)
+partition "Worker: оформление полиса" {
+  :Генерация PDF полиса
+  (шаблон + данные заявки);
+  :PUT в S3
+  (s3://dms-policies/{yyyy}/{mm}/{policy_number}.pdf)
+  + pdf_uri в applications;
 
-:Финальный PDF с ЭЦП страховщика;
+  :POST в ЕГИС ДМС
+  (идемпотентно по policy_number);
+  if (ЕГИС ответил?) then (нет)
+    :status = POLICY_PENDING_REGISTRATION,
+    фоновый дожим;
+    note right
+      Полис юридически выдан,
+      клиента не блокируем.
+      Регистрация догонит асинхронно.
+    end note
+  else (да)
+    :status = ACTIVE;
+  endif
 
-fork
-  :E-mail клиенту;
-fork again
-  :Публикация в ЛК;
-fork again
-  :Push / SMS-уведомление;
-end fork
+  :Публикация policy.issued
+  в Kafka topic dms.policies;
+}
+
+|Внешние системы|
+partition "Notification service (own retries + DLQ)" {
+  fork
+    :E-mail (SendGrid);
+  fork again
+    :SMS (шлюз);
+  fork again
+    :Push (FCM);
+  end fork
+  note right
+    Каналы независимы.
+    Падение одного из них
+    не валит остальные —
+    у каждого свой ретрай и DLQ.
+  end note
+}
+
+|Frontend|
+:Видит status = ACTIVE
+→ кнопка «скачать полис»
+(GET /v1/applications/{id}/policy.pdf);
+
+|Система ДМС|
+:Проверка прав доступа,
+streaming PDF из S3 через бэк
+(signed URL, TTL 5 мин,
+наружу не отдаём);
 
 |Клиент|
-:Получение полиса;
-
-|Система ДМС|
-:Закрытие заявки
-(статус CLOSED, метрики SLA);
+:Получение полиса в PDF;
 stop
 
 @enduml
