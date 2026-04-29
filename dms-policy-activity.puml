@@ -61,54 +61,53 @@ Location на статус-эндпоинт;
 status = IN_PROGRESS,
 шаг записан в saga_state;
 
-fork
-  |Внешние системы|
-  :Андеррайтинг
-  (мед.БД, circuit breaker, 8с);
-fork again
-  |Внешние системы|
-  :KYC и антифрод
-  (circuit breaker, 8с);
-fork again
+repeat
+  fork
+    |Внешние системы|
+    :Андеррайтинг
+    (мед.БД, circuit breaker, 8с);
+  fork again
+    |Внешние системы|
+    :KYC и антифрод
+    (circuit breaker, 8с);
+  fork again
+    |Система ДМС|
+    :Расчёт стоимости;
+  end fork
+
   |Система ДМС|
-  :Расчёт стоимости;
-end fork
+  if (Все сервисы ответили?) then (да)
+    break
+  else (нет)
+    if (Попыток < 4 (30с, 2м, 10м, 1ч)?) then (да)
+      :Запись next_attempt_at и retry_count.
+      Планировщик возобновит обработку;
+    else (нет)
+      :status = MANUAL_REVIEW,
+      задача оператору, alert DevOps;
+      :Ожидание операторской резолюции
+      (AcceptEventAction);
+    endif
+  endif
+repeat while (повтор вызовов) is (да) not (нет)
 
 |Система ДМС|
-if (Все сервисы вернули ответ?) then (нет)
-  :В applications записывается
-  next_attempt_at и retry_count;
-  if (Попыток < 4 (30с, 2м, 10м, 1ч)?) then (да)
-    :Планировщик раз в минуту
-    забирает заявки с истекшим
-    next_attempt_at и повторяет
-    параллельные вызовы;
-    detach
-  else (нет)
-    :status = MANUAL_REVIEW,
-    задача оператору, alert DevOps;
-    end
-  endif
-else (да)
-endif
-
 if (underwriting = APPROVED
 и kyc = PASSED?) then (нет)
   :status = REJECTED + reason_code,
   событие application.rejected;
-  end
+  stop
 else (да)
 endif
 
 if (Скоринг помечен как ручной?) then (да)
   :status = PENDING_MANUAL_REVIEW,
-  задача оператору в АРМ.
-  Воркер прерывается до события
-  manual_review.completed.
-  Откат не нужен: внешние вызовы
-  read-only, заявка остаётся
-  в БД и ждёт оператора;
-  end
+  задача оператору в АРМ;
+  :Ожидание manual_review.completed
+  (AcceptEventAction).
+  Откат не нужен:
+  внешние вызовы read-only,
+  заявка ждёт оператора в БД;
 else (нет)
 endif
 
@@ -141,23 +140,28 @@ if (Подпись валидна?) then (нет)
   Заявка остаётся в PRICED.
   По таймауту 30 минут
   status = PAYMENT_EXPIRED;
-  end
+  stop
 else (да)
+  :status = PAID,
+  событие payment.confirmed;
 endif
 
-:status = PAID;
+repeat
+  :Воркер генерирует PDF,
+  выполняет PUT в S3
+  (3 ретрая внутри попытки);
+  if (Загрузка успешна?) then (да)
+    break
+  else (нет)
+    :status = POLICY_PDF_PENDING.
+    При access denied или другой
+    ошибке IAM создаётся задача SRE;
+    :Ожидание разрешения SRE
+    (AcceptEventAction);
+  endif
+repeat while (повтор после фикса) is (да) not (нет)
 
-:Воркер генерирует PDF;
-
-if (Загрузка PDF в S3?) then (нет)
-  :3 ретрая. При access denied
-  или другой ошибке IAM
-  status = POLICY_PDF_PENDING,
-  задача SRE;
-  end
-else (да)
-endif
-
+|Система ДМС|
 :pdf_uri в applications;
 
 :POST в ЕГИС ДМС,
@@ -171,7 +175,11 @@ else (нет)
 endif
 
 :Публикация policy.issued
-в Kafka topic dms.policies;
+в Kafka topic dms.policies
+(в обоих ветках:
+ACTIVE и POLICY_PENDING_REGISTRATION).
+Уведомления не зависят
+от регистрации в реестре;
 
 |Внешние системы|
 :Notification service подписан на событие.
@@ -200,7 +208,7 @@ endif
 if (Доступ разрешён?) then (нет)
   :HTTP 403,
   фронт показывает ошибку;
-  end
+  stop
 else (да)
 endif
 
