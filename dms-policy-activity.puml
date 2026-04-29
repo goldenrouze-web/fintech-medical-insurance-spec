@@ -1,5 +1,5 @@
 @startuml DMS_Policy_Issuance
-title Выдача ДМС-полиса — Activity Diagram
+title Выдача ДМС-полиса. Activity Diagram
 
 skinparam ConditionEndStyle hline
 skinparam ActivityShape roundbox
@@ -19,8 +19,7 @@ start
 контакты, программа);
 
 |Frontend|
-:Первичная валидация
-(маски, обязательность);
+:Локальная валидация полей;
 
 if (Данные корректны?) then (нет)
   repeat
@@ -33,183 +32,180 @@ else (да)
 endif
 
 |Frontend|
-:POST /v1/applications
-+ заголовок Idempotency-Key (UUID);
+:POST /v1/applications,
+заголовок Idempotency-Key;
 
 |Система ДМС|
-partition "API-слой" {
-  :Проверка Idempotency-Key
-  (Redis, TTL = 24ч);
-  if (Ключ уже видели?) then (да)
-    :Возврат сохранённого ответа
-    (application_id, status);
+:Проверка ключа в Redis,
+TTL 24 часа;
+if (Ключ повторный?) then (да)
+  :Возврат сохранённого ответа;
+  detach
+else (нет)
+endif
+
+:Создание заявки в одной транзакции:
+INSERT applications (status = NEW),
+audit_log, outbox-запись application.created;
+
+:HTTP 202 Accepted, application_id,
+Location на статус-эндпоинт;
+
+|Frontend|
+:Поллинг GET /v1/applications/{id}/status,
+интервалы 2с, 5с, 10с
+плюс случайное смещение до 20%;
+
+|Система ДМС|
+:Воркер читает application.created из Kafka,
+status = IN_PROGRESS,
+шаг записан в saga_state;
+
+fork
+  |Внешние системы|
+  :Андеррайтинг
+  (мед.БД, circuit breaker, 8с);
+fork again
+  |Внешние системы|
+  :KYC и антифрод
+  (circuit breaker, 8с);
+fork again
+  |Система ДМС|
+  :Расчёт стоимости;
+end fork
+
+|Система ДМС|
+if (Все сервисы вернули ответ?) then (нет)
+  :В applications записывается
+  next_attempt_at и retry_count;
+  if (Попыток < 4 (30с, 2м, 10м, 1ч)?) then (да)
+    :Планировщик раз в минуту
+    забирает заявки с истекшим
+    next_attempt_at и повторяет
+    параллельные вызовы;
     detach
   else (нет)
+    :status = MANUAL_REVIEW,
+    задача оператору, alert DevOps;
+    end
   endif
+else (да)
+endif
 
-  :BEGIN TX;
-  :INSERT applications (status = NEW)
-  + audit_log
-  + outbox-запись application.created;
-  :COMMIT TX (~50 мс);
+if (underwriting = APPROVED
+и kyc = PASSED?) then (нет)
+  :status = REJECTED + reason_code,
+  событие application.rejected;
+  end
+else (да)
+endif
 
-  :HTTP 202 Accepted
-  + application_id
-  + Location: /v1/applications/{id}/status;
-}
+if (Скоринг помечен как ручной?) then (да)
+  :status = PENDING_MANUAL_REVIEW,
+  задача оператору в АРМ.
+  Воркер прерывается до события
+  manual_review.completed.
+  Откат не нужен: внешние вызовы
+  read-only, заявка остаётся
+  в БД и ждёт оператора;
+  end
+else (нет)
+endif
+
+:Расчёт final_premium,
+status = PRICED;
 
 |Frontend|
-:Поллинг GET /v1/applications/{id}/status
-(2с → 5с → 10с, jitter ±20%)
-либо SSE-подписка;
+:Видит status = PRICED,
+POST /v1/applications/{id}/payment;
 
 |Система ДМС|
-partition "Outbox relay" {
-  :Публикация application.created
-  в Kafka topic dms.applications;
-}
-
-partition "Worker: оркестрация (saga)" {
-  :status = IN_PROGRESS
-  (короткая TX);
-
-  fork
-    |Внешние системы|
-    :Андеррайтинг
-    (мед. БД, circuit breaker,
-    timeout 8с);
-  fork again
-    |Внешние системы|
-    :KYC / антифрод
-    (circuit breaker, timeout 8с);
-  fork again
-    |Система ДМС|
-    :Расчёт стоимости
-    (внутренний сервис);
-  end fork
-
-  |Система ДМС|
-  if (Все сервисы ответили?) then (нет)
-    :В очередь dms.retry
-    next_attempt_at = now + 30с
-    (backoff 30с → 2м → 10м → 1ч);
-    if (Попытки исчерпаны?) then (да)
-      :status = MANUAL_REVIEW,
-      задача оператору + alert DevOps;
-      end
-    else (нет)
-      :Ждём next_attempt_at;
-      detach
-    endif
-  else (да)
-  endif
-
-  if (Андеррайтинг APPROVED
-  и KYC PASSED?) then (нет)
-    :status = REJECTED + reason_code,
-    событие application.rejected;
-    end
-  else (да)
-  endif
-
-  if (Нужен ручной разбор скоринга?) then (да)
-    :status = PENDING_MANUAL_REVIEW,
-    задача оператору в АРМ;
-    note right
-      Поток обрывается.
-      Возобновится по событию
-      manual_review.completed —
-      длительность не ограничиваем
-      (час, сутки — не важно).
-    end note
-    end
-  else (нет)
-  endif
-
-  :Расчёт final_premium
-  (база + надбавки − скидки);
-  :status = PRICED
-  + событие application.priced;
-}
+:Создание сессии в платёжном шлюзе,
+возврат payment_url;
 
 |Frontend|
-:Поллинг видит status = PRICED
-→ экран оплаты;
+:Редирект клиента на payment_url;
 
 |Клиент|
-:Подтверждение оплаты
-(переход в платёжный шлюз);
+:Ввод данных карты, 3DS;
 
 |Внешние системы|
 :Платёжный шлюз
-(3DS, списание);
+проводит списание;
 
 |Система ДМС|
-partition "Платёжный callback" {
-  :POST /v1/payments/callback
-  (HMAC-SHA256, идемпотентно
-  по payment_id);
-  if (Подпись валидна?) then (нет)
-    :HTTP 401, инцидент в журнал;
-    end
-  else (да)
-  endif
-  :status = PAID
-  + событие payment.confirmed;
-}
+:S2S callback POST /v1/payments/callback,
+подпись HMAC-SHA256;
+if (Подпись валидна?) then (нет)
+  :HTTP 401, инцидент в журнал.
+  Заявка остаётся в PRICED.
+  По таймауту 30 минут
+  status = PAYMENT_EXPIRED;
+  end
+else (да)
+endif
 
-partition "Worker: оформление полиса" {
-  :Генерация PDF полиса
-  (шаблон + данные заявки);
-  :PUT в S3
-  (s3://dms-policies/{yyyy}/{mm}/{policy_number}.pdf)
-  + pdf_uri в applications;
+:status = PAID;
 
-  :POST в ЕГИС ДМС
-  (идемпотентно по policy_number);
-  if (ЕГИС ответил?) then (нет)
-    :status = POLICY_PENDING_REGISTRATION,
-    фоновый дожим;
-    note right
-      Полис юридически выдан,
-      клиента не блокируем.
-      Регистрация догонит асинхронно.
-    end note
-  else (да)
-    :status = ACTIVE;
-  endif
+:Воркер генерирует PDF;
 
-  :Публикация policy.issued
-  в Kafka topic dms.policies;
-}
+if (Загрузка PDF в S3?) then (нет)
+  :3 ретрая. При access denied
+  или другой ошибке IAM
+  status = POLICY_PDF_PENDING,
+  задача SRE;
+  end
+else (да)
+endif
+
+:pdf_uri в applications;
+
+:POST в ЕГИС ДМС,
+идемпотентно по policy_number;
+if (ЕГИС ответил?) then (да)
+  :status = ACTIVE;
+else (нет)
+  :status = POLICY_PENDING_REGISTRATION,
+  фоновый дожим.
+  Полис юридически выдан;
+endif
+
+:Публикация policy.issued
+в Kafka topic dms.policies;
 
 |Внешние системы|
-partition "Notification service (own retries + DLQ)" {
-  fork
-    :E-mail (SendGrid);
-  fork again
-    :SMS (шлюз);
-  fork again
-    :Push (FCM);
-  end fork
-  note right
-    Каналы независимы.
-    Падение одного из них
-    не валит остальные —
-    у каждого свой ретрай и DLQ.
-  end note
-}
+:Notification service подписан на событие.
+Email, SMS, push рассылаются независимо
+со своими ретраями и DLQ;
 
 |Frontend|
-:Видит status = ACTIVE
-→ кнопка «скачать полис»
-(GET /v1/applications/{id}/policy.pdf);
+if (status = ACTIVE
+или POLICY_PENDING_REGISTRATION?) then (да)
+  :Кнопка получения полиса активна;
+else (нет)
+  :Кнопка скрыта,
+  показано сообщение
+  «полис формируется»;
+  detach
+endif
+
+|Клиент|
+:Запрос на получение полиса;
+
+|Frontend|
+:GET /v1/applications/{id}/policy.pdf;
 
 |Система ДМС|
-:Проверка прав доступа,
-streaming PDF из S3 через бэк
-(signed URL, TTL 5 мин,
-наружу не отдаём);
+:Проверка прав доступа клиента;
+if (Доступ разрешён?) then (нет)
+  :HTTP 403,
+  фронт показывает ошибку;
+  end
+else (да)
+endif
+
+:Получение presigned URL,
+streaming PDF из S3 через бэк;
 
 |Клиент|
 :Получение полиса в PDF;
