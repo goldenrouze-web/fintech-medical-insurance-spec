@@ -1,0 +1,465 @@
+openapi: 3.1.0
+info:
+  title: ${API_TITLE:-"Сервис выпуска полисов ДМС"}
+  description: |
+    API для управления полисами добровольного медицинского страхования (ДМС).
+    Поддерживает создание, поиск, обновление и удаление полисов.
+  version: ${API_VERSION:-"1.0.0"}
+  contact:
+    name: ${CONTACT_NAME:-"ДМС Support"}
+    email: ${CONTACT_EMAIL:-"dms@insurance.ru"}
+
+servers:
+  - url: ${DEV_SERVER:-"http://localhost:8080/api/v1"}
+    description: Development
+  - url: ${PROD_SERVER:-"https://api.insurance.ru/v1"}
+    description: Production
+
+security:
+  - BearerAuth: []
+
+paths:
+  /dms/policies:
+    post:
+      summary: Создать заявку на полис ДМС
+      description: Создает новую заявку на выпуск полиса ДМС с идемпотентностью
+      tags: [dms-policies]
+      operationId: createDmsPolicy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DmsPolicyCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/PolicyCreated'
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+
+    get:
+      summary: Список полисов ДМС
+      description: Пагинированный список полисов с фильтрацией и сортировкой
+      tags: [dms-policies]
+      operationId: listDmsPolicies
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/ProgramTypeFilter'
+        - $ref: '#/components/parameters/ValidFromFilter'
+        - $ref: '#/components/parameters/ValidToFilter'
+      responses:
+        '200':
+          $ref: '#/components/responses/PoliciesList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+
+  /dms/policies/{policyId}:
+    parameters:
+      - $ref: '#/components/parameters/PolicyId'
+    
+    get:
+      summary: Получить полис ДМС
+      tags: [dms-policies]
+      operationId: getDmsPolicy
+      responses:
+        '200':
+          $ref: '#/components/responses/PolicyDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+
+    put:
+      summary: Обновить полис ДМС
+      tags: [dms-policies]
+      operationId: updateDmsPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DmsPolicyUpdate'
+      responses:
+        '200':
+          $ref: '#/components/responses/PolicyUpdated'
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+
+    delete:
+      summary: Удалить полис ДМС
+      tags: [dms-policies]
+      operationId: deleteDmsPolicy
+      responses:
+        '204':
+          $ref: '#/components/responses/NoContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен авторизации
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Ключ идемпотентности для защиты от дублирования
+
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Уникальный идентификатор полиса
+
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum:
+          - policy_id
+          - created_at
+          - valid_from
+          - valid_to
+          - premium_amount
+        default: "-created_at"
+      description: Поле сортировки (- для убывания)
+
+    StatusFilter:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [draft, pending, active, expired, cancelled]
+
+    ProgramTypeFilter:
+      name: program_type
+      in: query
+      schema:
+        type: string
+        enum: [individual, family, corporate, outpatient, inpatient, comprehensive]
+
+    ValidFromFilter:
+      name: valid_from
+      in: query
+      schema:
+        type: string
+        format: date
+
+    ValidToFilter:
+      name: valid_to
+      in: query
+      schema:
+        type: string
+        format: date
+
+  schemas:
+    # Основная сущность полиса ДМС
+    DmsPolicy:
+      type: object
+      required: [policy_id, status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to, premium_amount]
+      properties:
+        policy_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          type: string
+          enum: [draft, pending, active, expired, cancelled]
+        program_type:
+          type: string
+          enum: [individual, family, corporate, outpatient, inpatient, comprehensive]
+        policyholder_id:
+          type: string
+          format: uuid
+        coverage_program_id:
+          type: string
+          format: uuid
+        insured_persons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InsuredPerson'
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: string
+          format: date
+        premium_amount:
+          type: number
+          format: float
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    # Создание полиса (без ID)
+    DmsPolicyCreate:
+      type: object
+      required: [status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
+      allOf:
+        - $ref: '#/components/schemas/DmsPolicy'
+        - type: object
+          properties:
+            status:
+              enum: [draft, pending]
+
+    # Обновление полиса
+    DmsPolicyUpdate:
+      type: object
+      required: [status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
+      allOf:
+        - $ref: '#/components/schemas/DmsPolicyCreate'
+        - type: object
+          properties:
+            status:
+              enum: [draft, pending, active, expired, cancelled]
+
+    # Застрахованное лицо
+    InsuredPerson:
+      type: object
+      required: [full_name, birth_date, passport_number]
+      properties:
+        full_name:
+          type: string
+          maxLength: 200
+        passport_number:
+          type: string
+          pattern: '^\d{4}\s?\d{6}$'
+        snils:
+          type: string
+          pattern: '^\d{3}-\d{2}-\d{2}\s?\d{2}$'
+        birth_date:
+          type: string
+          format: date
+        phone:
+          type: string
+          pattern: '^\+?[7|8][0-9]{10}$'
+        relationship:
+          type: string
+          enum: [self, spouse, child, parent, employee, dependent]
+
+    # Ответы
+    PoliciesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DmsPolicy'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        _links:
+          $ref: '#/components/schemas/HALLinks'
+
+    PolicyResponse:
+      type: object
+      properties:
+        policy:
+          $ref: '#/components/schemas/DmsPolicy'
+        _links:
+          $ref: '#/components/schemas/HALLinks'
+
+    HALLinks:
+      type: array
+      items:
+        $ref: '#/components/schemas/Link'
+
+    Link:
+      type: object
+      required: [href, rel]
+      properties:
+        href:
+          type: string
+        rel:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+        title:
+          type: string
+
+    # Ошибки
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: array
+          items:
+            type: string
+
+  responses:
+    PolicyCreated:
+      description: Полис успешно создан
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PolicyResponse'
+
+    PolicyDetails:
+      description: Детали полиса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PolicyResponse'
+
+    PolicyUpdated:
+      description: Полис успешно обновлен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PolicyResponse'
+
+    PoliciesList:
+      description: Список полисов
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PoliciesListResponse'
+
+    NoContent:
+      description: Успешно (без контента)
+
+    BadRequest:
+      description: Неверный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    Unauthorized:
+      description: Не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    Forbidden:
+      description: Доступ запрещен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    NotFound:
+      description: Не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    Conflict:
+      description: Конфликт (существует)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    TooManyRequests:
+      description: Слишком много запросов
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+
+    GatewayTimeout:
+      description: Таймаут шлюза
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
