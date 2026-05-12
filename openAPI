@@ -1,19 +1,17 @@
 openapi: 3.1.0
 info:
-  title: ${API_TITLE:-"Сервис выпуска полисов ДМС"}
+  title: Сервис выпуска полисов ДМС
   description: |
-    API для управления полисами добровольного медицинского страхования (ДМС).
-    Поддерживает создание, поиск, обновление и удаление полисов.
-  version: ${API_VERSION:-"1.0.0"}
-  contact:
-    name: ${CONTACT_NAME:-"ДМС Support"}
-    email: ${CONTACT_EMAIL:-"dms@insurance.ru"}
+    REST API для управления полисами добровольного медицинского страхования.
+    Создание, поиск, обновление и удаление полисов.
 
-servers:
-  - url: ${DEV_SERVER:-"http://localhost:8080/api/v1"}
-    description: Development
-  - url: ${PROD_SERVER:-"https://api.insurance.ru/v1"}
-    description: Production
+    JSON-Schema для каждой сущности доступна через стандартный механизм OpenAPI:
+    импортируйте этот файл в Swagger UI, Redoc или Stoplight для просмотра
+    развёрнутых схем с примерами.
+  version: 1.0.0
+  contact:
+    name: DMS API Support
+    email: dms-api@example.com
 
 security:
   - BearerAuth: []
@@ -21,8 +19,11 @@ security:
 paths:
   /dms/policies:
     post:
-      summary: Создать заявку на полис ДМС
-      description: Создает новую заявку на выпуск полиса ДМС с идемпотентностью
+      summary: Создать заявку на полис
+      description: |
+        Создает заявку на выпуск полиса ДМС.
+        Идемпотентность обеспечивается заголовком Idempotency-Key.
+        Возвращает 404, если policyholder_id или coverage_program_id не найдены.
       tags: [dms-policies]
       operationId: createDmsPolicy
       parameters:
@@ -33,27 +34,45 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DmsPolicyCreate'
+            example:
+              program_type: individual
+              policyholder_id: "a1b2c3d4-0000-0000-0000-000000000001"
+              coverage_program_id: "b2c3d4e5-0000-0000-0000-000000000001"
+              insured_persons:
+                - full_name: "Иванов Иван Иванович"
+                  birth_date: "1990-05-15"
+                  passport_number: "4510 123456"
+                  phone: "+79161234567"
+                  relationship: self
+              valid_from: "2026-06-01"
+              valid_to: "2027-06-01"
       responses:
         '201':
           $ref: '#/components/responses/PolicyCreated'
-        '204':
-          $ref: '#/components/responses/NoContent'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Страхователь (policyholder_id) или программа (coverage_program_id) не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                code: 404
+                message: "Страхователь с id a1b2c3d4-... не найден"
+                timestamp: "2026-05-12T10:00:00Z"
         '409':
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
 
     get:
-      summary: Список полисов ДМС
-      description: Пагинированный список полисов с фильтрацией и сортировкой
+      summary: Список полисов
+      description: Возвращает пагинированный список полисов с фильтрацией и сортировкой.
       tags: [dms-policies]
       operationId: listDmsPolicies
       parameters:
@@ -71,15 +90,13 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
 
   /dms/policies/{policyId}:
     parameters:
       - $ref: '#/components/parameters/PolicyId'
-    
+
     get:
-      summary: Получить полис ДМС
+      summary: Получить полис по ID
       tags: [dms-policies]
       operationId: getDmsPolicy
       responses:
@@ -91,11 +108,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
 
     put:
-      summary: Обновить полис ДМС
+      summary: Обновить полис
+      description: Полное обновление полиса. Частичное обновление не поддерживается.
       tags: [dms-policies]
       operationId: updateDmsPolicy
       requestBody:
@@ -107,8 +123,6 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/PolicyUpdated'
-        '204':
-          $ref: '#/components/responses/NoContent'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -121,24 +135,66 @@ paths:
           $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
 
     delete:
-      summary: Удалить полис ДМС
+      summary: Удалить полис
+      description: Удаляет полис. Допускается только для статусов draft и cancelled.
       tags: [dms-policies]
       operationId: deleteDmsPolicy
       responses:
         '204':
-          $ref: '#/components/responses/NoContent'
+          description: Полис удален
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '504':
-          $ref: '#/components/responses/GatewayTimeout'
+        '409':
+          description: Полис в статусе active/pending, удаление запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /webhooks/payment-callback:
+    post:
+      summary: Callback от платежного шлюза
+      description: |
+        Вебхук, вызываемый платежным шлюзом после обработки платежа.
+        Проверяет подпись в заголовке X-Signature.
+        При успешной оплате переводит полис из pending в active.
+      tags: [webhooks]
+      operationId: paymentCallback
+      security: []
+      parameters:
+        - name: X-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 подпись тела запроса для проверки подлинности
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCallbackPayload'
+            example:
+              payment_id: "pay_abc123"
+              policy_id: "a1b2c3d4-0000-0000-0000-000000000001"
+              status: succeeded
+              amount: 45000.00
+              paid_at: "2026-05-12T14:30:00Z"
+      responses:
+        '200':
+          description: Callback принят
+        '400':
+          description: Невалидная подпись или тело запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
 components:
   securitySchemes:
@@ -146,7 +202,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT токен авторизации
+      description: JWT-токен, полученный при аутентификации
 
   parameters:
     IdempotencyKey:
@@ -156,7 +212,7 @@ components:
       schema:
         type: string
         format: uuid
-      description: Ключ идемпотентности для защиты от дублирования
+      description: UUID для защиты от дублирования запроса
 
     PolicyId:
       name: policyId
@@ -165,11 +221,12 @@ components:
       schema:
         type: string
         format: uuid
-      description: Уникальный идентификатор полиса
+      description: UUID полиса
 
     Limit:
       name: limit
       in: query
+      description: Количество записей на странице
       schema:
         type: integer
         minimum: 1
@@ -179,6 +236,7 @@ components:
     Offset:
       name: offset
       in: query
+      description: Смещение от начала выборки
       schema:
         type: integer
         minimum: 0
@@ -187,20 +245,16 @@ components:
     Sort:
       name: sort
       in: query
+      description: "Поле сортировки. Префикс - означает убывание, например: -created_at"
       schema:
         type: string
-        enum:
-          - policy_id
-          - created_at
-          - valid_from
-          - valid_to
-          - premium_amount
-        default: "-created_at"
-      description: Поле сортировки (- для убывания)
+        enum: [created_at, -created_at, valid_from, -valid_from, premium_amount, -premium_amount]
+        default: -created_at
 
     StatusFilter:
       name: status
       in: query
+      description: Фильтр по статусу полиса
       schema:
         type: string
         enum: [draft, pending, active, expired, cancelled]
@@ -208,13 +262,15 @@ components:
     ProgramTypeFilter:
       name: program_type
       in: query
+      description: Фильтр по типу программы
       schema:
         type: string
-        enum: [individual, family, corporate, outpatient, inpatient, comprehensive]
+        enum: [individual, family, corporate]
 
     ValidFromFilter:
       name: valid_from
       in: query
+      description: "Фильтр: дата начала действия не раньше указанной"
       schema:
         type: string
         format: date
@@ -222,180 +278,273 @@ components:
     ValidToFilter:
       name: valid_to
       in: query
+      description: "Фильтр: дата окончания действия не позже указанной"
       schema:
         type: string
         format: date
 
   schemas:
-    # Основная сущность полиса ДМС
     DmsPolicy:
       type: object
+      additionalProperties: false
       required: [policy_id, status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to, premium_amount]
       properties:
         policy_id:
           type: string
           format: uuid
           readOnly: true
+          description: UUID полиса, назначается сервером
         status:
           type: string
           enum: [draft, pending, active, expired, cancelled]
+          description: "Текущий статус полиса. draft -- черновик, pending -- ожидает оплаты, active -- действует, expired -- истек, cancelled -- отменен"
         program_type:
           type: string
-          enum: [individual, family, corporate, outpatient, inpatient, comprehensive]
+          enum: [individual, family, corporate]
+          description: "Тип программы: individual -- физлицо, family -- семейный, corporate -- корпоративный"
         policyholder_id:
           type: string
           format: uuid
+          description: UUID страхователя (того, кто платит)
         coverage_program_id:
           type: string
           format: uuid
+          description: UUID программы покрытия из справочника (определяет набор услуг и лимиты)
         insured_persons:
           type: array
           minItems: 1
           items:
             $ref: '#/components/schemas/InsuredPerson'
+          description: Список застрахованных лиц (минимум одно)
         valid_from:
           type: string
           format: date
+          description: Дата начала действия полиса (включительно)
         valid_to:
           type: string
           format: date
+          description: Дата окончания действия полиса (включительно)
         premium_amount:
           type: number
-          format: float
+          format: double
           minimum: 0
+          description: Сумма страховой премии в рублях
         created_at:
           type: string
           format: date-time
           readOnly: true
+          description: Дата и время создания записи
         updated_at:
           type: string
           format: date-time
           readOnly: true
+          description: Дата и время последнего обновления
 
-    # Создание полиса (без ID)
     DmsPolicyCreate:
       type: object
-      required: [status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
-      allOf:
-        - $ref: '#/components/schemas/DmsPolicy'
-        - type: object
-          properties:
-            status:
-              enum: [draft, pending]
+      additionalProperties: false
+      required: [program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
+      description: Тело запроса для создания полиса. Статус назначается сервером (draft).
+      properties:
+        program_type:
+          type: string
+          enum: [individual, family, corporate]
+          description: Тип программы страхования
+        policyholder_id:
+          type: string
+          format: uuid
+          description: UUID страхователя
+        coverage_program_id:
+          type: string
+          format: uuid
+          description: UUID программы покрытия из справочника
+        insured_persons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InsuredPerson'
+          description: Застрахованные лица
+        valid_from:
+          type: string
+          format: date
+          description: Желаемая дата начала действия
+        valid_to:
+          type: string
+          format: date
+          description: Желаемая дата окончания действия
 
-    # Обновление полиса
     DmsPolicyUpdate:
       type: object
-      required: [status, program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
-      allOf:
-        - $ref: '#/components/schemas/DmsPolicyCreate'
-        - type: object
-          properties:
-            status:
-              enum: [draft, pending, active, expired, cancelled]
+      additionalProperties: false
+      required: [program_type, policyholder_id, insured_persons, coverage_program_id, valid_from, valid_to]
+      description: Тело запроса для обновления полиса. Полная замена, все поля обязательны.
+      properties:
+        status:
+          type: string
+          enum: [draft, pending, active, expired, cancelled]
+          description: Новый статус полиса (переходы валидируются сервером)
+        program_type:
+          type: string
+          enum: [individual, family, corporate]
+          description: Тип программы
+        policyholder_id:
+          type: string
+          format: uuid
+          description: UUID страхователя
+        coverage_program_id:
+          type: string
+          format: uuid
+          description: UUID программы покрытия
+        insured_persons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/InsuredPerson'
+          description: Застрахованные лица
+        valid_from:
+          type: string
+          format: date
+          description: Дата начала действия
+        valid_to:
+          type: string
+          format: date
+          description: Дата окончания действия
 
-    # Застрахованное лицо
     InsuredPerson:
       type: object
+      additionalProperties: false
       required: [full_name, birth_date, passport_number]
+      description: Данные застрахованного лица
       properties:
         full_name:
           type: string
           maxLength: 200
-        passport_number:
-          type: string
-          pattern: '^\d{4}\s?\d{6}$'
-        snils:
-          type: string
-          pattern: '^\d{3}-\d{2}-\d{2}\s?\d{2}$'
+          description: ФИО полностью
+          example: "Иванов Иван Иванович"
         birth_date:
           type: string
           format: date
+          description: Дата рождения
+          example: "1990-05-15"
+        passport_number:
+          type: string
+          pattern: '^\d{4}\s?\d{6}$'
+          description: "Серия и номер паспорта РФ (формат: 4510 123456)"
+          example: "4510 123456"
+        snils:
+          type: string
+          pattern: '^\d{3}-\d{3}-\d{3}\s?\d{2}$'
+          description: "СНИЛС (формат: 123-456-789 00)"
+          example: "123-456-789 00"
         phone:
           type: string
-          pattern: '^\+?[7|8][0-9]{10}$'
+          pattern: '^\+7\d{10}$'
+          description: "Номер телефона (формат: +79161234567)"
+          example: "+79161234567"
         relationship:
           type: string
-          enum: [self, spouse, child, parent, employee, dependent]
+          enum: [self, spouse, child, parent]
+          description: "Отношение к страхователю: self -- сам, spouse -- супруг(а), child -- ребенок, parent -- родитель"
+          example: "self"
 
-    # Ответы
+    PaymentCallbackPayload:
+      type: object
+      additionalProperties: false
+      required: [payment_id, policy_id, status, amount, paid_at]
+      description: Тело callback-запроса от платежного шлюза
+      properties:
+        payment_id:
+          type: string
+          description: Идентификатор платежа в системе шлюза
+        policy_id:
+          type: string
+          format: uuid
+          description: UUID полиса, за который произведена оплата
+        status:
+          type: string
+          enum: [succeeded, failed, refunded]
+          description: "Результат платежа: succeeded -- успешно, failed -- отклонен, refunded -- возврат"
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          description: Сумма платежа в рублях
+        paid_at:
+          type: string
+          format: date-time
+          description: Время проведения платежа
+
     PoliciesListResponse:
       type: object
+      additionalProperties: false
+      description: Ответ со списком полисов и метаданными пагинации
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/DmsPolicy'
+          description: Массив полисов
         total:
           type: integer
+          description: Общее количество записей по фильтру
         limit:
           type: integer
+          description: Размер страницы
         offset:
           type: integer
-        _links:
-          $ref: '#/components/schemas/HALLinks'
+          description: Текущее смещение
 
     PolicyResponse:
       type: object
+      additionalProperties: false
+      description: Ответ с одним полисом
       properties:
         policy:
           $ref: '#/components/schemas/DmsPolicy'
-        _links:
-          $ref: '#/components/schemas/HALLinks'
 
-    HALLinks:
-      type: array
-      items:
-        $ref: '#/components/schemas/Link'
-
-    Link:
-      type: object
-      required: [href, rel]
-      properties:
-        href:
-          type: string
-        rel:
-          type: string
-        method:
-          type: string
-          enum: [GET, POST, PUT, DELETE]
-        title:
-          type: string
-
-    # Ошибки
     ApiError:
       type: object
-      required: [code, message]
+      additionalProperties: false
+      required: [code, message, timestamp]
+      description: Стандартный формат ошибки API
       properties:
         code:
           type: integer
+          description: HTTP-код ошибки
+          example: 400
         message:
           type: string
+          description: Человекочитаемое описание ошибки
+          example: "Поле valid_from обязательно"
         timestamp:
           type: string
           format: date-time
+          description: Время возникновения ошибки
+          example: "2026-05-12T10:00:00Z"
         details:
           type: array
           items:
             type: string
+          description: Детали валидации (если есть)
+          example: ["valid_from: обязательное поле", "insured_persons: минимум 1 элемент"]
 
   responses:
     PolicyCreated:
-      description: Полис успешно создан
+      description: Полис создан
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/PolicyResponse'
 
     PolicyDetails:
-      description: Детали полиса
+      description: Данные полиса
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/PolicyResponse'
 
     PolicyUpdated:
-      description: Полис успешно обновлен
+      description: Полис обновлен
       content:
         application/json:
           schema:
@@ -408,46 +557,43 @@ components:
           schema:
             $ref: '#/components/schemas/PoliciesListResponse'
 
-    NoContent:
-      description: Успешно (без контента)
-
     BadRequest:
-      description: Неверный запрос
+      description: Невалидное тело запроса или параметры
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
 
     Unauthorized:
-      description: Не авторизован
+      description: Отсутствует или невалидный JWT-токен
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
 
     Forbidden:
-      description: Доступ запрещен
+      description: Недостаточно прав для операции
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
 
     NotFound:
-      description: Не найден
+      description: Ресурс не найден
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
 
     Conflict:
-      description: Конфликт (существует)
+      description: Конфликт (дубликат по Idempotency-Key или невалидный переход статуса)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
 
     TooManyRequests:
-      description: Слишком много запросов
+      description: Превышен лимит запросов
       content:
         application/json:
           schema:
@@ -456,10 +602,4 @@ components:
         Retry-After:
           schema:
             type: integer
-
-    GatewayTimeout:
-      description: Таймаут шлюза
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiError'
+          description: Через сколько секунд можно повторить запрос
