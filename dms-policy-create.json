@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "dms-policy-create",
+  "title": "Создание полиса ДМС",
+  "description": "Тело POST /dms/policies. Статус назначается сервером (draft), premium считается на бэке.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "program_type",
+    "policyholder_id",
+    "coverage_program_id",
+    "insured_persons",
+    "valid_from",
+    "valid_to"
+  ],
+  "properties": {
+    "program_type": {
+      "type": "string",
+      "enum": ["individual", "family", "corporate"],
+      "description": "individual -- физлицо, family -- семейный, corporate -- корпоративный"
+    },
+    "policyholder_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID страхователя (кто платит)"
+    },
+    "coverage_program_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "UUID программы покрытия из справочника"
+    },
+    "insured_persons": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "insured-person.json" },
+      "description": "Кого страхуем. Минимум 1, максимум 20 (ограничение продукта)."
+    },
+    "valid_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Начало действия, формат YYYY-MM-DD. Не раньше завтра."
+    },
+    "valid_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Конец действия, формат YYYY-MM-DD. Допустимые интервалы: 3, 6 или 12 мес от valid_from."
+    }
+  }
+}
