@@ -1,7 +1,3 @@
-# async-контракты MedInsure
-# согласовано на созвоне 07.05, обновлено 12.05
-# вопросы -- #dms-dev в слаке или dms-api@example.com
-
 asyncapi: 3.0.0
 
 info:
