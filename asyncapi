@@ -1,14 +1,12 @@
 asyncapi: 3.0.0
 
 info:
-  title: MedInsure async contracts
+  title: MedInsure events
   version: 1.0.0
   description: |
-    Контракты на асинхронное взаимодействие. Kafka внутри,
-    webhook от платёжного шлюза снаружи. Нотификации тоже тут
-    но они больше для документации, кодогенерацию с них не делаем.
+    Kafka внутри, webhook от платёжки снаружи.
+    Нотификации для документации, кодогенерацию не делаем.
   contact:
-    name: DMS API Support
     email: dms-api@example.com
 
 defaultContentType: application/json
@@ -18,13 +16,11 @@ servers:
   kafka:
     host: kafka:9092
     protocol: kafka
-    description: partitions=3 на всех топиках, пока хватает
+    description: 3 партиции на топик
 
-  # в проде будет другой хост, сейчас sandbox
   payment-gw:
     host: '{gatewayHost}'
     protocol: https
-    description: ЮKassa sandbox
     variables:
       gatewayHost:
         default: sandbox.gateway.example.com
@@ -32,23 +28,17 @@ servers:
   smtp:
     host: smtp.example.com:587
     protocol: smtp
-    # TODO переехать на SES после MVP
 
-  sms:
+  sms-gw:
     host: sms.example.com
     protocol: https
 
-# ------- каналы -------
 
 channels:
 
-  # заявки
-
   application.created:
     address: dms.applications.created
-    description: |
-      Новая заявка на полис. Попадает через transactional outbox
-      сразу после INSERT (status=NEW), воркер подхватывает.
+    description: outbox после INSERT, status=NEW
     servers:
       - $ref: '#/servers/kafka'
     messages:
@@ -57,27 +47,28 @@ channels:
 
   application.rejected:
     address: dms.applications.rejected
-    # KYC или андеррайтинг завернули, notification шлёт отказ
     servers:
       - $ref: '#/servers/kafka'
     messages:
       msg:
         $ref: '#/components/messages/ApplicationRejected'
 
-  # платежи
+  # -- оплата --
 
   payment.confirmed:
     address: dms.payments.confirmed
-    description: Billing положил после проверки webhook. Дальше генерация PDF + ЕГИС.
+    servers:
+      - $ref: '#/servers/kafka'
     messages:
       msg:
         $ref: '#/components/messages/PaymentConfirmed'
+    description: billing кладёт после webhook, дальше PDF + ЕГИС
 
   payment.failed:
     address: dms.payments.failed
     description: |
-      Платёж не прошёл. Клиенту уведомление,
-      policy-module ставит таймер 24ч на повторную попытку.
+      платёж упал, клиенту пуш,
+      policy-module 24ч таймер на повтор
     servers:
       - $ref: '#/servers/kafka'
     messages:
@@ -86,21 +77,19 @@ channels:
 
   policy.issued:
     address: dms.policies.issued
+    description: |
+      PDF сгенерён. ACTIVE если ЕГИС ок,
+      POLICY_PENDING_REGISTRATION если нет.
+      Уведомления уходят в любом случае, договорились на ретро.
     servers:
       - $ref: '#/servers/kafka'
     messages:
       msg:
         $ref: '#/components/messages/PolicyIssued'
-    description: |
-      PDF готов. Статус ACTIVE если ЕГИС ответил,
-      POLICY_PENDING_REGISTRATION если ещё нет.
-      Уведомления уходят в обоих случаях, решили на ретро
-      что клиент не должен ждать реестр.
 
   policy.cancelled:
     address: dms.policies.cancelled
-    # расторжение / таймаут оплаты / протухшая сессия шлюза
-    description: Billing считает возврат pro rata, notification шлёт клиенту.
+    # таймаут / расторжение / протухла сессия шлюза
     servers:
       - $ref: '#/servers/kafka'
     messages:
@@ -109,14 +98,13 @@ channels:
 
   policy.expiring:
     address: dms.policies.expiring
-    description: Cron за 30/14/3 дня до valid_to, notification рассылает напоминания.
+    description: cron, 30/14/3 дня до valid_to
     messages:
       msg:
         $ref: '#/components/messages/PolicyExpiring'
 
   claim.submitted:
     address: dms.claims.submitted
-    description: Клиент подал заявление на выплату. Подтверждение на email + кейс в очередь.
     servers:
       - $ref: '#/servers/kafka'
     messages:
@@ -132,11 +120,9 @@ channels:
       msg:
         $ref: '#/components/messages/ClaimStatusChanged'
 
-  # webhook
-
   payment-callback:
     address: /webhooks/payment-callback
-    description: Шлюз POST-ит после обработки. HMAC-SHA256 в X-Signature.
+    description: POST от шлюза, HMAC в X-Signature
     servers:
       - $ref: '#/servers/payment-gw'
     messages:
@@ -145,7 +131,6 @@ channels:
 
   notifications.email:
     address: notifications/email
-    description: Письма клиентам (PDF, чек, claim, напоминания, сброс пароля).
     servers:
       - $ref: '#/servers/smtp'
     messages:
@@ -154,136 +139,112 @@ channels:
 
   notifications.sms:
     address: notifications/sms
-    # OTP, полис оформлен, скоро кончится
     servers:
-      - $ref: '#/servers/sms'
+      - $ref: '#/servers/sms-gw'
     messages:
       msg:
         $ref: '#/components/messages/SmsNotification'
 
 
-# ------- операции -------
-
 operations:
 
-  # produce
-
-  pub-application-created:
+  pub-app-created:
     action: send
     channel:
       $ref: '#/channels/application.created'
-    summary: Новая заявка
     description: policy-модуль, outbox
 
-  application-rejected:
+  reject-app:
     action: send
     channel:
       $ref: '#/channels/application.rejected'
-    summary: Заявка завёрнута
 
   pub-payment-ok:
     action: send
     channel:
       $ref: '#/channels/payment.confirmed'
-    summary: Оплата прошла
 
   pub-payment-fail:
     action: send
     channel:
       $ref: '#/channels/payment.failed'
-    summary: Платёж не прошёл
 
-  policy-issued:
+  issue-policy:
     action: send
     channel:
       $ref: '#/channels/policy.issued'
-    summary: Полис выпущен
-    description: уходит после PDF, даже если ЕГИС ещё не ответил
 
-  pub-policy-cancelled:
+  cancel-policy:
     action: send
     channel:
       $ref: '#/channels/policy.cancelled'
-    summary: Полис отменён
 
-  expiring-reminder:
+  send-expiring:
     action: send
     channel:
       $ref: '#/channels/policy.expiring'
-    summary: Напоминание
 
-  pub-claim-submitted:
+  pub-claim:
     action: send
     channel:
       $ref: '#/channels/claim.submitted'
-    summary: Новый claim
 
-  claim-status-update:
+  claim-update:
     action: send
     channel:
       $ref: '#/channels/claim.status-changed'
-    summary: Статус claim
 
-  # consume
+  # потребители
 
   process-application:
     action: receive
     channel:
       $ref: '#/channels/application.created'
-    summary: Обработка заявки
     description: |
-      IN_PROGRESS, параллельно андеррайтинг + KYC + тариф.
-      Ок -- PRICED. Сервис лёг -- ретрай 30с/2м/10м/1ч,
-      после 4 фейлов MANUAL_REVIEW.
+      андеррайтинг + KYC + тариф параллельно.
+      ретрай 30с/2м/10м/1ч, потом MANUAL_REVIEW
 
-  generate-pdf:
+  gen-pdf:
     action: receive
     channel:
       $ref: '#/channels/payment.confirmed'
-    summary: PDF + ЕГИС
-    description: генерит PDF (3 попытки залить в S3), ЕГИС идемпотентно, потом policy.issued
+    description: PDF (3 попытки в S3), потом ЕГИС, потом policy.issued
 
-  notify-issued:
+  on-policy-issued:
     action: receive
     channel:
       $ref: '#/channels/policy.issued'
-    summary: Рассылка
-    description: email с PDF, SMS, push. Каждый канал отдельно, свои ретраи, свой DLQ.
+    description: email + sms + push, каждый канал свой DLQ
 
-  notify-claim:
+  on-claim-update:
     action: receive
     channel:
       $ref: '#/channels/claim.status-changed'
-    summary: Уведомление по claim
 
-  notify-expiring:
+  on-expiring:
     action: receive
     channel:
       $ref: '#/channels/policy.expiring'
-    summary: Напоминание клиенту
 
   handle-callback:
     action: receive
     channel:
       $ref: '#/channels/payment-callback'
-    summary: Webhook от шлюза
     description: |
-      HMAC из X-Signature. Битая подпись = 401 + инцидент.
-      succeeded -> payment.confirmed, pending->active.
-      failed -> payment.failed.
-      refunded -> возврат.
+      HMAC проверка. Битая подпись = 401.
+      succeeded -> payment.confirmed
+      failed -> payment.failed
+      refunded -> возврат
 
-  send-email:
+  do-email:
     action: send
     channel:
       $ref: '#/channels/notifications.email'
-    summary: Email
 
-  send-sms:
+  do-sms:
     action: send
     channel:
       $ref: '#/channels/notifications.sms'
-    summary: SMS
 
 
 components:
@@ -292,75 +253,67 @@ components:
 
     ApplicationCreated:
       name: ApplicationCreated
-      title: Заявка создана
-      summary: через outbox
+      summary: outbox
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/ApplicationCreatedEvent'
+        $ref: '#/components/schemas/AppCreatedEvt'
 
     ApplicationRejected:
-      title: Отказ по заявке
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/ApplicationRejectedEvent'
+        $ref: '#/components/schemas/AppRejectedEvt'
 
     PaymentConfirmed:
       name: PaymentConfirmed
-      title: Оплата ок
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/PaymentOkEvent'
+        $ref: '#/components/schemas/PayOkEvt'
 
     PaymentFailed:
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/PaymentFailEvent'
+        $ref: '#/components/schemas/PayFailEvt'
 
     PolicyIssued:
       name: PolicyIssued
-      title: Полис выпущен
-      summary: PDF готов, ЕГИС мог ещё не ответить
+      summary: PDF готов
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/PolicyIssuedData'
+        $ref: '#/components/schemas/PolicyIssuedEvt'
 
     PolicyCancelled:
       name: PolicyCancelled
-      title: Полис отменён
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/PolicyCancelledData'
+        $ref: '#/components/schemas/PolicyCancelEvt'
 
     PolicyExpiring:
+      # планировщик без CE-заголовков
+      # TODO нужны ли CE тут?
       payload:
-        $ref: '#/components/schemas/ExpiringReminder'
-      # headers не указываем, планировщик кидает без CE-обёртки
-      # TODO: согласовать с Лёшей, нужны ли тут CE-заголовки
+        $ref: '#/components/schemas/ExpiringEvt'
 
     ClaimSubmitted:
       name: ClaimSubmitted
-      title: Новый claim
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/ClaimSubmittedData'
+        $ref: '#/components/schemas/ClaimNewEvt'
 
     ClaimStatusChanged:
-      title: Статус claim
       headers:
-        $ref: '#/components/schemas/KafkaHeaders'
+        $ref: '#/components/schemas/CEHeaders'
       payload:
-        $ref: '#/components/schemas/ClaimStatusEvent'
+        $ref: '#/components/schemas/ClaimUpdateEvt'
 
     PaymentCallback:
       name: PaymentCallback
-      title: Callback от шлюза
       contentType: application/json
       headers:
         type: object
@@ -368,40 +321,33 @@ components:
         properties:
           X-Signature:
             type: string
-            description: HMAC-SHA256 тела
       payload:
-        $ref: '#/components/schemas/GatewayCallback'
+        $ref: '#/components/schemas/GwCallback'
 
     EmailNotification:
       payload:
-        $ref: '#/components/schemas/EmailPayload'
+        $ref: '#/components/schemas/EmailMsg'
 
     SmsNotification:
       payload:
-        $ref: '#/components/schemas/SmsPayload'
+        $ref: '#/components/schemas/SmsMsg'
+
 
   schemas:
 
-    # CE-заголовки для kafka
-    KafkaHeaders:
+    CEHeaders:
       type: object
       required: [ce_id, ce_type, ce_source, ce_specversion, ce_time]
       properties:
-        ce_id:
-          type: string
-          format: uuid
-        ce_type:
-          type: string
-        ce_source:
-          type: string
+        ce_id: { type: string, format: uuid }
+        ce_type: { type: string }
+        ce_source: { type: string }
         ce_specversion:
           type: string
           enum: ["1.0"]
-        ce_time:
-          type: string
-          format: date-time
+        ce_time: { type: string, format: date-time }
 
-    ApplicationCreatedEvent:
+    AppCreatedEvt:
       type: object
       additionalProperties: false
       required:
@@ -425,52 +371,56 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/InsuredPerson'
+            type: object
+            required: [full_name, birth_date, passport_number]
+            properties:
+              full_name: { type: string, maxLength: 200 }
+              birth_date: { type: string, format: date }
+              passport_number:
+                type: string
+                pattern: '^\d{4}\s?\d{6}$'
+              snils: { type: string, pattern: '^\d{3}-\d{3}-\d{3}\s?\d{2}$' }
+              phone: { type: string, pattern: '^\+7\d{10}$' }
+              relationship:
+                type: string
+                enum: [self, spouse, child, parent]
         valid_from: { type: string, format: date }
         valid_to: { type: string, format: date }
         status: { type: string, enum: [new] }
         created_at: { type: string, format: date-time }
 
-    ApplicationRejectedEvent:
+    AppRejectedEvt:
       type: object
       additionalProperties: false
       required: [application_id, policyholder_id, reason_code, reason_message, rejected_at]
       properties:
-        application_id:
-          type: string
-          format: uuid
-        policyholder_id:
-          type: string
-          format: uuid
+        application_id: { type: string, format: uuid }
+        policyholder_id: { type: string, format: uuid }
         reason_code:
           type: string
           enum: [underwriting_failed, kyc_failed, antifraud_failed, manual_rejection]
         reason_message:
           type: string
-          description: текст для клиента
-        rejected_at:
-          type: string
-          format: date-time
+          description: для клиента
+        rejected_at: { type: string, format: date-time }
 
-    # платежи
-
-    PaymentOkEvent:
+    PayOkEvt:
       type: object
       additionalProperties: false
       required: [payment_id, policy_id, application_id, amount, currency, paid_at]
       properties:
-        payment_id: { type: string } # ID на стороне шлюза
+        payment_id: { type: string }
         policy_id: { type: string, format: uuid }
         application_id: { type: string, format: uuid }
         amount:
           type: number
           minimum: 0.01
-          description: рубли
         currency: { type: string, enum: [RUB] }
         paid_at: { type: string, format: date-time }
 
-    PaymentFailEvent:
+    PayFailEvt:
       type: object
+      # без additionalProperties, шлюз может дописать
       required: [payment_id, policy_id, application_id, failure_reason, failed_at]
       properties:
         payment_id: { type: string }
@@ -478,11 +428,8 @@ components:
         application_id: { type: string, format: uuid }
         failure_reason: { type: string }
         failed_at: { type: string, format: date-time }
-      # additionalProperties не ставим -- шлюз может добавить свои поля
 
-    # полисы
-
-    PolicyIssuedData:
+    PolicyIssuedEvt:
       type: object
       additionalProperties: false
       required:
@@ -506,47 +453,49 @@ components:
         status:
           type: string
           enum: [active, policy_pending_registration]
-        program_type: { type: string, enum: [individual, family, corporate] }
+        program_type:
+          type: string
+          enum: [individual, family, corporate]
         coverage_program_id: { type: string, format: uuid }
         insured_persons:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/InsuredPerson'
+            type: object
+            required: [full_name, birth_date, passport_number]
+            properties:
+              full_name: { type: string }
+              birth_date: { type: string, format: date }
+              passport_number: { type: string, pattern: '^\d{4}\s?\d{6}$' }
+              snils: { type: string }
+              phone: { type: string }
+              relationship: { type: string }
         valid_from: { type: string, format: date }
         valid_to: { type: string, format: date }
         premium_amount: { type: number, minimum: 0 }
-        pdf_uri:
-          type: string
-          format: uri
+        pdf_uri: { type: string, format: uri }
         issued_at: { type: string, format: date-time }
 
-    PolicyCancelledData:
+    PolicyCancelEvt:
       type: object
       additionalProperties: false
       required: [policy_id, policy_number, policyholder_id, cancellation_reason, refund_amount, cancelled_at]
       properties:
-        policy_id:
-          type: string
-          format: uuid
+        policy_id: { type: string, format: uuid }
         policy_number:
           type: string
           pattern: '^MI-\d{4}-\d{8}$'
-        policyholder_id:
-          type: string
-          format: uuid
+        policyholder_id: { type: string, format: uuid }
         cancellation_reason:
           type: string
           enum: [client_request, payment_timeout, payment_expired]
-          # client_request = расторг, pro rata
-          # payment_timeout = 24ч
-          # payment_expired = сессия шлюза 30мин
         refund_amount:
           type: number
           minimum: 0
+          # pro rata
         cancelled_at: { type: string, format: date-time }
 
-    ExpiringReminder:
+    ExpiringEvt:
       type: object
       required: [policy_id, policy_number, policyholder_id, valid_to, days_remaining]
       properties:
@@ -558,7 +507,7 @@ components:
           type: integer
           enum: [30, 14, 3]
 
-    ClaimSubmittedData:
+    ClaimNewEvt:
       type: object
       additionalProperties: false
       required: [claim_id, policy_id, policyholder_id, service_type, service_date, clinic_name, claimed_amount, documents, submitted_at]
@@ -566,9 +515,7 @@ components:
         claim_id: { type: string, format: uuid }
         policy_id: { type: string, format: uuid }
         policyholder_id: { type: string, format: uuid }
-        service_type:
-          type: string
-          # "Стоматология", "Офтальмология" и т.п., пока без enum
+        service_type: { type: string }
         service_date: { type: string, format: date }
         clinic_name: { type: string }
         claimed_amount:
@@ -578,19 +525,24 @@ components:
           type: array
           maxItems: 10
           items:
-            $ref: '#/components/schemas/ClaimDoc'
+            type: object
+            required: [document_id, file_name, content_type, size_bytes, uri]
+            properties:
+              document_id: { type: string, format: uuid }
+              file_name: { type: string }
+              content_type:
+                type: string
+                enum: [image/jpeg, image/png, application/pdf]
+              size_bytes:
+                type: integer
+                maximum: 10485760
+              uri: { type: string, format: uri }
         submitted_at: { type: string, format: date-time }
 
-    ClaimStatusEvent:
+    ClaimUpdateEvt:
       type: object
       additionalProperties: false
-      required:
-        - claim_id
-        - policy_id
-        - policyholder_id
-        - previous_status
-        - new_status
-        - changed_at
+      required: [claim_id, policy_id, policyholder_id, previous_status, new_status, changed_at]
       properties:
         claim_id: { type: string, format: uuid }
         policy_id: { type: string, format: uuid }
@@ -601,17 +553,14 @@ components:
         new_status:
           type: string
           enum: [submitted, in_review, pending_docs, approved, rejected, paid]
-        approved_amount:
-          type: number
-          minimum: 0
+        approved_amount: { type: number, minimum: 0 }
         franchise_deduction: { type: number, minimum: 0 }
         rejection_reason: { type: string }
         additional_docs_request: { type: string }
         changed_by: { type: string, format: uuid }
         changed_at: { type: string, format: date-time }
 
-    GatewayCallback:
-      # зеркалит PaymentCallbackPayload из openAPI
+    GwCallback:
       type: object
       additionalProperties: false
       required: [payment_id, policy_id, status, amount, paid_at]
@@ -624,7 +573,7 @@ components:
         amount: { type: number, minimum: 0.01 }
         paid_at: { type: string, format: date-time }
 
-    EmailPayload:
+    EmailMsg:
       type: object
       additionalProperties: false
       required: [notification_id, notification_type, recipient_email, subject, body_template, created_at]
@@ -632,14 +581,7 @@ components:
         notification_id: { type: string, format: uuid }
         notification_type:
           type: string
-          enum:
-            - policy_issued
-            - fiscal_receipt
-            - claim_submitted
-            - claim_status_changed
-            - expiring_reminder
-            - password_reset
-            - application_rejected
+          enum: [policy_issued, fiscal_receipt, claim_submitted, claim_status_changed, expiring_reminder, password_reset, application_rejected]
         recipient_email: { type: string, format: email }
         subject: { type: string }
         body_template: { type: string }
@@ -655,7 +597,7 @@ components:
               uri: { type: string, format: uri }
         created_at: { type: string, format: date-time }
 
-    SmsPayload:
+    SmsMsg:
       type: object
       required: [notification_id, notification_type, recipient_phone, message_text, created_at]
       properties:
@@ -670,32 +612,3 @@ components:
           type: string
           maxLength: 160
         created_at: { type: string, format: date-time }
-
-    # общие
-
-    InsuredPerson:
-      type: object
-      additionalProperties: false
-      required: [full_name, birth_date, passport_number]
-      properties:
-        full_name: { type: string, maxLength: 200 }
-        birth_date: { type: string, format: date }
-        passport_number: { type: string, pattern: '^\d{4}\s?\d{6}$' }
-        snils: { type: string, pattern: '^\d{3}-\d{3}-\d{3}\s?\d{2}$' }
-        phone: { type: string, pattern: '^\+7\d{10}$' }
-        relationship: { type: string, enum: [self, spouse, child, parent] }
-
-    ClaimDoc:
-      type: object
-      additionalProperties: false
-      required: [document_id, file_name, content_type, size_bytes, uri]
-      properties:
-        document_id: { type: string, format: uuid }
-        file_name: { type: string }
-        content_type:
-          type: string
-          enum: [image/jpeg, image/png, application/pdf]
-        size_bytes:
-          type: integer
-          maximum: 10485760
-        uri: { type: string, format: uri }
