@@ -126,21 +126,20 @@ components:
         ce_id:
           type: string
           format: uuid
-          description: ID самого события, генерируем на стороне продюсера
+          description: ID события
         ce_type:
           type: string
-          description: Что за событие, например dms.application.created
+          description: Тип события, dms.application.created и т.д.
         ce_source:
           type: string
-          description: Какой сервис отправил, у нас policy-service
+          description: Сервис-отправитель, policy-service
         ce_specversion:
           type: string
-          enum: ["1.0"]
-          description: Версия спецификации CloudEvents, всегда 1.0
+          description: Версия спецификации CloudEvents, сейчас 1.0
         ce_time:
           type: string
           format: date-time
-          description: Когда событие создано, UTC
+          description: Время создания события, UTC
 
     AppCreatedEvt:
       type: object
@@ -159,22 +158,22 @@ components:
         application_id:
           type: string
           format: uuid
-          description: ID заявки, генерит бэк при создании
+          description: ID заявки
         policyholder_id:
           type: string
           format: uuid
-          description: Кто оформляет и оплачивает полис
+          description: Страхователь
         coverage_program_id:
           type: string
           format: uuid
-          description: Выбранная программа покрытия из справочника
+          description: Программа покрытия
         program_type:
           type: string
           enum: [individual, family, corporate]
-          description: Тип программы, individual для физлица, family для семьи, corporate для юрлица
+          description: Тип программы
         insured_persons:
           type: array
-          description: Кого страхуем, минимум один человек, максимум 20
+          description: Застрахованные лица
           minItems: 1
           maxItems: 20
           items:
@@ -184,20 +183,20 @@ components:
               full_name:
                 type: string
                 maxLength: 200
-                description: ФИО полностью как в паспорте
+                description: ФИО
               birth_date:
                 type: string
                 format: date
                 description: Дата рождения
               passport_number:
                 type: string
-                description: Серия и номер паспорта РФ, например 4510 123456
+                description: Серия и номер паспорта РФ
               snils:
                 type: string
-                description: СНИЛС, формат 123-456-789 00, поле необязательное
+                description: СНИЛС
               phone:
                 type: string
-                description: Телефон в формате +79161234567
+                description: Телефон
               relationship:
                 type: string
                 enum: [self, spouse, child, parent]
@@ -205,15 +204,15 @@ components:
         valid_from:
           type: string
           format: date
-          description: Начало действия полиса, не раньше завтрашней даты
+          description: Начало действия полиса
         valid_to:
           type: string
           format: date
-          description: Окончание действия, допустимые сроки 3, 6 или 12 месяцев от valid_from
+          description: Окончание действия полиса
         created_at:
           type: string
           format: date-time
-          description: Время создания заявки
+          description: Когда создана заявка
 
     PayOkEvt:
       type: object
@@ -223,23 +222,22 @@ components:
       properties:
         payment_id:
           type: string
-          description: ID платежа на стороне шлюза, формат зависит от провайдера
+          description: ID платежа в шлюзе
         policy_id:
           type: string
           format: uuid
-          description: За какой полис заплатили
+          description: ID полиса
         amount:
           type: number
           minimum: 0.01
-          description: Сумма в рублях с копейками
+          description: Сумма платежа в рублях
         currency:
           type: string
-          enum: [RUB]
-          description: Валюта, пока только рубли
+          description: Валюта платежа, сейчас RUB
         paid_at:
           type: string
           format: date-time
-          description: Когда шлюз провёл платёж
+          description: Время проведения платежа
 
     PayFailEvt:
       type: object
@@ -248,18 +246,18 @@ components:
       properties:
         payment_id:
           type: string
-          description: ID платежа на стороне шлюза
+          description: ID платежа в шлюзе
         policy_id:
           type: string
           format: uuid
-          description: Полис, по которому не прошла оплата
+          description: ID полиса
         failure_reason:
           type: string
-          description: Текст ошибки от шлюза, пробрасываем как есть
+          description: Причина отказа от шлюза
         failed_at:
           type: string
           format: date-time
-          description: Когда шлюз отклонил платёж
+          description: Время отказа
 
     PolicyIssuedEvt:
       type: object
@@ -284,7 +282,7 @@ components:
           description: ID полиса
         policy_number:
           type: string
-          description: Номер полиса, формат MI-2026-00000147
+          description: Номер полиса
         policyholder_id:
           type: string
           format: uuid
@@ -292,7 +290,7 @@ components:
         status:
           type: string
           enum: [active, policy_pending_registration]
-          description: active если ЕГИС уже ответил, policy_pending_registration если ещё нет
+          description: Статус полиса после выпуска
         program_type:
           type: string
           enum: [individual, family, corporate]
@@ -321,7 +319,7 @@ components:
                 description: Серия и номер паспорта
               snils:
                 type: string
-                description: СНИЛС если есть
+                description: СНИЛС
               phone:
                 type: string
                 description: Телефон
@@ -336,15 +334,15 @@ components:
         premium_amount:
           type: number
           minimum: 0
-          description: Итоговая премия в рублях, рассчитана бэком по тарифной сетке
+          description: Страховая премия в рублях
         pdf_uri:
           type: string
           format: uri
-          description: Ссылка на PDF полиса в S3
+          description: PDF полиса в S3
         issued_at:
           type: string
           format: date-time
-          description: Когда полис был выпущен
+          description: Время выпуска полиса
 
     PolicyCancelEvt:
       type: object
@@ -358,7 +356,7 @@ components:
           description: ID полиса
         policy_number:
           type: string
-          description: Номер полиса, формат MI-YYYY-NNNNNNNN
+          description: Номер полиса
         policyholder_id:
           type: string
           format: uuid
@@ -366,12 +364,12 @@ components:
         cancellation_reason:
           type: string
           enum: [client_request, payment_timeout, payment_expired]
-          description: Причина, client_request это расторжение по желанию клиента, payment_timeout когда 24 часа прошло без оплаты, payment_expired если сессия шлюза протухла за 30 минут
+          description: Причина отмены полиса
         refund_amount:
           type: number
           minimum: 0
-          description: Сколько вернуть клиенту, считается pro rata
+          description: Сумма возврата в рублях
         cancelled_at:
           type: string
           format: date-time
-          description: Когда полис отменён
+          description: Время отмены
