@@ -1,0 +1,133 @@
+
+// mongo/dms_policy.js
+// Создание коллекции и схемы
+use("dms_database");
+
+db.createCollection("POLIS", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["polis_id", "polis_number", "issue_date", "expiry_date", "status", "client", "insurance", "programs", "doctor"],
+      properties: {
+        polis_id: { bsonType: "objectId" },
+        polis_number: { bsonType: "string", pattern: "^DM-[0-9]{4}-[0-9]{3}$" },
+        issue_date: { bsonType: "date" },
+        expiry_date: { bsonType: "date" },
+        status: { bsonType: "string", enum: ["ACTIVE", "EXPIRED", "CANCELLED", "PENDING"] },
+        client: { bsonType: "object" },
+        insurance: { bsonType: "array", minItems: 1 },
+        programs: { bsonType: "array", minItems: 1 },
+        doctor: { bsonType: "object" }
+      }
+    }
+  },
+  validationLevel: "strict",
+  validationAction: "error"
+});
+
+// Индексы
+db.POLIS.createIndex({ polis_number: 1 }, { unique: true });
+db.POLIS.createIndex({ client.client_id: 1 });
+db.POLIS.createIndex({ status: 1 });
+
+// Наполнение данными
+db.POLIS.insertMany([
+  {
+    polis_id: new ObjectId("507f1f77bcf86cd799439011"),
+    polis_number: "DM-2024-001",
+    issue_date: new Date("2024-01-15"),
+    expiry_date: new Date("2025-01-15"),
+    status: "ACTIVE",
+    client: {
+      client_id: new ObjectId("507f1f77bcf86cd799439010"),
+      surname: "Иванов",
+      first_name: "Петр",
+      middle_name: "Сергеевич",
+      birth_date: new Date("1990-05-15"),
+      phone: "+79001234567",
+      email: "ivanov@example.com",
+      birth_place: "Москва",
+      citizenship: "RU"
+    },
+    insurance: [
+      {
+        insurance_id: new ObjectId("507f1f77bcf86cd799439012"),
+        insurance_name: "Альфа-Страхование",
+        contact_phone: "+74951234567",
+        contact_email: "alfastrah@alfastrah.ru"
+      }
+    ],
+    programs: [
+      {
+        tech_id: new ObjectId("507f1f77bcf86cd799439013"),
+        tech_name: "Базовое ДМС",
+        description: "Минимальный пакет: консультации, диагностика"
+      },
+      {
+        tech_id: new ObjectId("507f1f77bcf86cd799439014"),
+        tech_name: "Расширенное ДМС",
+        description: "Полный пакет: госпитализация, стоматология"
+      }
+    ],
+    doctor: {
+      doctor_id: new ObjectId("507f1f77bcf86cd799439015"),
+      surname: "Козлов",
+      first_name: "Дмитрий",
+      specialization: "Врач-терапевт",
+      license_number: "LIC-12345"
+    }
+  },
+  {
+    polis_id: new ObjectId("507f1f77bcf86cd799439021"),
+    polis_number: "DM-2024-002",
+    issue_date: new Date("2024-02-20"),
+    expiry_date: new Date("2025-02-20"),
+    status: "ACTIVE",
+    client: {
+      client_id: new ObjectId("507f1f77bcf86cd799439020"),
+      surname: "Сидоров",
+      first_name: "Анна",
+      middle_name: "Владимировна",
+      birth_date: new Date("1985-08-22"),
+      phone: "+79002345678",
+      email: "sidorova@example.com",
+      birth_place: "Санкт-Петербург",
+      citizenship: "RU"
+    },
+    insurance: [
+      {
+        insurance_id: new ObjectId("507f1f77bcf86cd799439022"),
+        insurance_name: "Ингосстрах",
+        contact_phone: "+74952345678",
+        contact_email: "ingos@ingos.ru"
+      }
+    ],
+    programs: [
+      {
+        tech_id: new ObjectId("507f1f77bcf86cd799439014"),
+        tech_name: "Расширенное ДМС",
+        description: "Полный пакет: госпитализация, стоматология"
+      }
+    ],
+    doctor: {
+      doctor_id: new ObjectId("507f1f77bcf86cd799439025"),
+      surname: "Морозова",
+      first_name: "Елена",
+      specialization: "Врач-cardiologist",
+      license_number: "LIC-23456"
+    }
+  }
+]);
+
+// Тест валидации
+db.POLIS.insertOne({
+  polis_id: new ObjectId(),
+  polis_number: "INVALID",  // Не пройдет валидацию
+  issue_date: new Date(),
+  expiry_date: new Date(),
+  status: "ACTIVE",
+  client: {},
+  insurance: [],
+  programs: [],
+  doctor: {}
+});
