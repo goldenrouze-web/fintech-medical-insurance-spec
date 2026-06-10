@@ -11,7 +11,7 @@ KLIENT (Клиенты)
 | birth_place | VARCHAR(200) | | Место рождения |
 | citizenship | VARCHAR(50) | | Гражданство |
 
-PRZKADA (Страховые компании)
+Insurance (Страховые компании)
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
 | insurance_id | INT | PRIMARY KEY AUTO_INCREMENT | ID страховой компании |
@@ -45,11 +45,11 @@ POLIS (Полисы)
 | status | VARCHAR(20) | | Статус |
 | client_id | INT | FOREIGN KEY REFERENCES KLIENT(client_id) | ID клиента |
 
-POLIS_PRZKADA (Связь полис-страховая компания)
+POLIS_INSURANCE (Связь полис-страховая компания)
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
 | polis_id | INT | PRIMARY KEY, FOREIGN KEY REFERENCES POLIS(polis_id) | ID полиса |
-| insurance_id | INT | PRIMARY KEY, FOREIGN KEY REFERENCES PRZKADA(insurance_id) | ID страховой компании |
+| insurance_id | INT | PRIMARY KEY, FOREIGN KEY REFERENCES insuranceINSURANCE(insurance_id) | ID страховой компании |
 
 POLIS_TECHNICH (Связь полис-программа)
 | Поле | Тип | Ограничения | Описание |
