@@ -1,0 +1,303 @@
+Json schema
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client", "polis"],
+  "properties": {
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_id", "surname", "first_name", "birth_date"],
+      "properties": {
+        "client_id": {
+          "type": "string",
+          "description": "Уникальный идентификатор клиента (ObjectId)",
+          "examples": ["5f8a3b2c1e9f0d8c7b6a5f4e"]
+        },
+        "surname": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Фамилия клиента",
+          "examples": ["Иванов"]
+        },
+        "first_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Имя клиента",
+          "examples": ["Иван"]
+        },
+        "middle_name": {
+          "type": "string",
+          "description": "Отчество клиента",
+          "examples": ["Иванович"]
+        },
+        "birth_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Дата рождения клиента",
+          "examples": ["1985-03-10"]
+        },
+        "phone": {
+          "type": "string",
+          "description": "Номер телефона клиента",
+          "examples": ["+79123456789"]
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Электронная почта клиента",
+          "examples": ["client@example.com"]
+        },
+        "birth_place": {
+          "type": "string",
+          "description": "Место рождения клиента",
+          "examples": ["г. Москва"]
+        },
+        "citizenship": {
+          "type": "string",
+          "description": "Гражданство клиента",
+          "examples": ["РФ"]
+        },
+        "polis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/polis"
+          },
+          "description": "Список полисов клиента"
+        }
+      }
+    },
+    "polis": {
+      "$ref": "#/$defs/polis"
+    }
+  },
+  "$defs": {
+    "insurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["insurance_id", "insurance_name"],
+      "properties": {
+        "insurance_id": {
+          "type": "string",
+          "description": "Уникальный идентификатор страховой компании (ObjectId)",
+          "examples": ["61b2c3d4e5f6g7h8i9j0k1l2"]
+        },
+        "insurance_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Название страховой компании",
+          "examples": ["Страховая компания Альфа"]
+        },
+        "contact_phone": {
+          "type": "string",
+          "description": "Контактный телефон страховой компании",
+          "examples": ["+74951234567"]
+        },
+        "contact_email": {
+          "type": "string",
+          "format": "email",
+          "description": "Электронная почта страховой компании",
+          "examples": ["info@alpha-insurance.com"]
+        }
+      }
+    },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tech_id", "tech_name"],
+      "properties": {
+        "tech_id": {
+          "type": "string",
+          "description": "Уникальный идентификатор программы (ObjectId)",
+          "examples": ["62c3d4e5f6g7h8i9j0k1l2m3"]
+        },
+        "tech_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Название программы",
+          "examples": ["Программа ДМС Стандарт"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Описание программы",
+          "examples": ["Базовая программа добровольного медицинского страхования"]
+        }
+      }
+    },
+    "doctor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doctor_id", "surname", "first_name", "specialization"],
+      "properties": {
+        "doctor_id": {
+          "type": "string",
+          "description": "Уникальный идентификатор врача (ObjectId)",
+          "examples": ["63d4e5f6g7h8i9j0k1l2m3n4"]
+        },
+        "surname": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Фамилия врача",
+          "examples": ["Петров"]
+        },
+        "first_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Имя врача",
+          "examples": ["Петр"]
+        },
+        "specialization": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Специализация врача",
+          "examples": ["Терапевт"]
+        },
+        "license_number": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Номер лицензии врача",
+          "examples": ["LIC-987654321"]
+        }
+      }
+    },
+    "polis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["polis_id", "polis_number", "issue_date", "expiry_date", "status", "client_id"],
+      "properties": {
+        "polis_id": {
+          "type": "string",
+          "description": "Уникальный идентификатор полиса (ObjectId)",
+          "examples": ["60a1b2c3d4e5f6g7h8i9j0k1"]
+        },
+        "polis_number": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Номер полиса",
+          "examples": ["POL-123456789"]
+        },
+        "issue_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Дата выдачи полиса",
+          "examples": ["2023-01-15"]
+        },
+        "expiry_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Дата окончания действия полиса",
+          "examples": ["2024-01-15"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Статус полиса",
+          "enum": ["active", "expired", "cancelled"]
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Идентификатор клиента, которому принадлежит полис",
+          "examples": ["5f8a3b2c1e9f0d8c7b6a5f4e"]
+        },
+        "insurance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/insurance"
+          },
+          "description": "Список страховых компаний, связанных с полисом"
+        },
+        "programs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/program"
+          },
+          "description": "Список программ, охватываемых полисом"
+        },
+        "doctor": {
+          "$ref": "#/$defs/doctor",
+          "description": "Врач, назначенный по полису"
+        }
+      }
+    }
+  }
+}
+
+
+JSON объект
+
+{
+  "client": {
+    "client_id": "5f8a3b2c1e9f0d8c7b6a5f4e",
+    "surname": "Иванов",
+    "first_name": "Иван",
+    "middle_name": "Иванович",
+    "birth_date": "1985-03-10",
+    "phone": "+79123456789",
+    "email": "client@example.com",
+    "birth_place": "г. Москва",
+    "citizenship": "РФ",
+    "polis": [
+      {
+        "polis_id": "60a1b2c3d4e5f6g7h8i9j0k1",
+        "polis_number": "POL-123456789",
+        "issue_date": "2023-01-15",
+        "expiry_date": "2024-01-15",
+        "status": "active",
+        "client_id": "5f8a3b2c1e9f0d8c7b6a5f4e",
+        "insurance": [
+          {
+            "insurance_id": "61b2c3d4e5f6g7h8i9j0k1l2",
+            "insurance_name": "Страховая компания Альфа",
+            "contact_phone": "+74951234567",
+            "contact_email": "info@alpha-insurance.com"
+          }
+        ],
+        "programs": [
+          {
+            "tech_id": "62c3d4e5f6g7h8i9j0k1l2m3",
+            "tech_name": "Программа ДМС Стандарт",
+            "description": "Базовая программа добровольного медицинского страхования"
+          }
+        ],
+        "doctor": {
+          "doctor_id": "63d4e5f6g7h8i9j0k1l2m3n4",
+          "surname": "Петров",
+          "first_name": "Петр",
+          "specialization": "Терапевт",
+          "license_number": "LIC-987654321"
+        }
+      }
+    ]
+  },
+  "polis": {
+    "polis_id": "60a1b2c3d4e5f6g7h8i9j0k1",
+    "polis_number": "POL-123456789",
+    "issue_date": "2023-01-15",
+    "expiry_date": "2024-01-15",
+    "status": "active",
+    "client_id": "5f8a3b2c1e9f0d8c7b6a5f4e",
+    "insurance": [
+      {
+        "insurance_id": "61b2c3d4e5f6g7h8i9j0k1l2",
+        "insurance_name": "Страховая компания Альфа",
+        "contact_phone": "+74951234567",
+        "contact_email": "info@alpha-insurance.com"
+      }
+    ],
+    "programs": [
+      {
+        "tech_id": "62c3d4e5f6g7h8i9j0k1l2m3",
+        "tech_name": "Программа ДМС Стандарт",
+        "description": "Базовая программа добровольного медицинского страхования"
+      }
+    ],
+    "doctor": {
+      "doctor_id": "63d4e5f6g7h8i9j0k1l2m3n4",
+      "surname": "Петров",
+      "first_name": "Петр",
+      "specialization": "Терапевт",
+      "license_number": "LIC-987654321"
+    }
+  }
+}
