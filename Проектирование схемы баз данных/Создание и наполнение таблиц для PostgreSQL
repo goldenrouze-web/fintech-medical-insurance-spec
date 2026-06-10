@@ -1,0 +1,189 @@
+-- Создание таблицы KLIENT (Клиенты)
+CREATE TABLE KLIENT (
+    client_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    email VARCHAR(100) NOT NULL,
+    CONSTRAINT uq_client_email UNIQUE (email),
+    birth_date DATE NOT NULL,
+    phone VARCHAR(20),
+    birth_place VARCHAR(200),
+    citizenship VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение 
+INSERT INTO KLIENT (first_name, last_name, middle_name, email, birth_date, phone, birth_place, citizenship)
+VALUES
+    ('Иван', 'Иванов', 'Иванович', 'ivanov@example.com', '1985-05-15', '+79991234567', 'Москва', 'Россия'), RETURNING id,
+    ('Петр', 'Петров', 'Петрович', 'petrov@example.com', '1990-08-22', '+79123456789', 'Санкт-Петербург', 'Россия'), RETURNING id,
+    ('Екатерина', 'Смирнова', 'Викторовна', 'smirnova@example.com', '1978-11-03', NULL, 'Казань', 'Россия'), RETURNING id,
+    ('Виктор', 'Колхозов', NULL, 'kolhoz@example.com', '1982-04-12', '+79001234567', 'Екатеринбург', 'Россия'), RETURNING id;
+
+
+-- Создание таблицы PRZKADA (Страховые компании)
+CREATE TABLE PRZKADA (
+    insurance_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    insurance_name VARCHAR(200) NOT NULL,
+    contact_phone VARCHAR(20),
+    contact_email VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение
+INSERT INTO PRZKADA (insurance_name, contact_phone, contact_email)
+VALUES
+    ('Росгосстрах', '+74951234567', 'info@rgs.ru'), RETURNING id,
+    ('АльфаСтрахование', '+74957654321', 'info@alfastrah.ru'), RETURNING id,
+    ('Ингосстрах', '+74959876543', 'info@ingos.ru'), RETURNING id,
+    ('ВСК', '+74956543210', 'info@vsk.ru'), RETURNING id;
+
+
+-- Создание таблицы TECHNICH (Медицинское оборудование)
+CREATE TABLE TECHNICH (
+    tech_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tech_name VARCHAR(150) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+--Наполнение
+INSERT INTO TECHNICH (tech_name, description)
+VALUES
+    ('МРТ-аппарат', 'Томограф Siemens Magnetom, 1.5 Тесла'), RETURNING id,
+    ('УЗИ-аппарат', 'Philips iU22, экспертного класса'), RETURNING id,
+    ('Рентген-установка', 'Siemens Somatom, цифровая'), RETURNING id,
+    ('КТ-аппарат', 'Toshiba Aquilion, 64 среза'), RETURNING id;
+
+
+-- Создание таблицы VRACH (Врачи)
+CREATE TABLE VRACH (
+    doctor_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    specialization VARCHAR(150),
+    license_number VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение
+INSERT INTO VRACH (first_name, last_name, specialization, license_number)
+VALUES
+    ('Сергей', 'Петров', 'Терапевт', 'Л030-0012345'), RETURNING id,
+    ('Мария', 'Иванова', 'Кардиолог', 'Л030-0054321'), RETURNING id,
+    ('Андрей', 'Сидоров', 'Хирург', 'Л030-0098765'), RETURNING id,
+    ('Елена', 'Васильева', 'Офтальмолог', 'Л030-0011111'), RETURNING id;
+
+
+-- Создание таблицы POLIS (Полисы)
+CREATE TABLE POLIS (
+    polis_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    polis_number VARCHAR(50) NOT NULL,
+    issue_date DATE NOT NULL,
+    expiry_date DATE NOT NULL,
+    status VARCHAR(20),
+    client_id UUID NOT NULL REFERENCES KLIENT(client_id) ON DELETE CASCADE,
+    CONSTRAINT chk_policy_dates CHECK (issue_date < expiry_date),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+--Наполнение
+INSERT INTO POLIS (polis_number, issue_date, expiry_date, status, client_id)
+VALUES
+    ('POL-2024-001', '2024-01-10', '2025-01-09', 'active', 
+        (SELECT id FROM KLIENT WHERE email = 'ivanov@example.com')), RETURNING id,
+    ('POL-2024-002', '2024-03-15', '2025-03-14', 'active', 
+        (SELECT id FROM KLIENT WHERE email = 'petrov@example.com')), RETURNING id;
+
+
+-- Таблица связи POLIS_PRZKADA
+CREATE TABLE POLIS_PRZKADA (
+    polis_id UUID NOT NULL REFERENCES POLIS(polis_id) ON DELETE CASCADE,
+    insurance_id UUID NOT NULL REFERENCES PRZKADA(insurance_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (polis_id, insurance_id),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение
+INSERT INTO POLIS_PRZKADA (polis_id, insurance_id)
+VALUES
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM PRZKADA WHERE insurance_name = 'Росгосстрах')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM PRZKADA WHERE insurance_name = 'АльфаСтрахование')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-002'),
+        (SELECT id FROM PRZKADA WHERE insurance_name = 'Ингосстрах')
+    ), RETURNING id;
+
+
+-- Таблица связи POLIS_TECHNICH
+CREATE TABLE POLIS_TECHNICH (
+    polis_id UUID NOT NULL REFERENCES POLIS(polis_id) ON DELETE CASCADE,
+    tech_id UUID NOT NULL REFERENCES TECHNICH(tech_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (polis_id, tech_id),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение
+INSERT INTO POLIS_TECHNICH (polis_id, tech_id)
+VALUES
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM TECHNICH WHERE tech_name = 'МРТ-аппарат')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM TECHNICH WHERE tech_name = 'УЗИ-аппарат')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-002'),
+        (SELECT id FROM TECHNICH WHERE tech_name = 'Рентген-установка')
+    ), RETURNING id;
+
+
+-- Таблица связи POLIS_VRACH
+CREATE TABLE POLIS_VRACH (
+    polis_id UUID NOT NULL REFERENCES POLIS(polis_id) ON DELETE CASCADE,
+    doctor_id UUID NOT NULL REFERENCES VRACH(doctor_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (polis_id, doctor_id),
+    CONSTRAINT chk_updated_after_created CHECK (updated_at >= created_at)
+);
+
+-- Наполнение
+INSERT INTO POLIS_VRACH (polis_id, doctor_id)
+VALUES
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM VRACH WHERE first_name = 'Сергей' AND last_name = 'Петров')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-001'),
+        (SELECT id FROM VRACH WHERE first_name = 'Мария' AND last_name = 'Иванова')
+    ), RETURNING id,
+    (
+        (SELECT id FROM POLIS WHERE polis_number = 'POL-2024-002'),
+        (SELECT id FROM VRACH WHERE first_name = 'Андрей' AND last_name = 'Сидоров')
+    ), RETURNING id;
+
