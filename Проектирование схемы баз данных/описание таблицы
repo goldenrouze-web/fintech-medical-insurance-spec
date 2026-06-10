@@ -19,7 +19,7 @@ PRZKADA (Страховые компании)
 | contact_phone | VARCHAR(20) | | Контактный телефон |
 | contact_email | VARCHAR(100) | | Email |
 
-TECHNICH (Медицинская программа)
+TECHNICH (Медицинское оборудование)
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
 | tech_id | INT | PRIMARY KEY AUTO_INCREMENT | ID оборудования |
