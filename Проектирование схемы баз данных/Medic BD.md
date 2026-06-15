@@ -8,10 +8,10 @@
 | first_name | VARCHAR(100) | NOT NULL | Имя |
 | middle_name | VARCHAR(100) |  | Отчество |
 | birth_date | DATE | NOT NULL | Дата рождения |
-| phone | VARCHAR(20) |  | Телефон |
-| email | VARCHAR(100) |  | Email |
-| birth_place | VARCHAR(200) |  | Место рождения |
-| citizenship | VARCHAR(50) |  | Гражданство |
+| phone | VARCHAR(20) | NOT NULL | Телефон |
+| email | VARCHAR(100) | NOT NULL | Email |
+| birth_place | VARCHAR(200) | NOT NULL | Место рождения |
+| citizenship | VARCHAR(50) | NOT NULL | Гражданство |
 
 ## INSURANCE (Страховые компании)
 
@@ -19,8 +19,8 @@
 |------|------|-------------|-----------|
 | insurance_id | INT | PRIMARY KEY AUTO_INCREMENT | ID страховой компании |
 | insurance_name | VARCHAR(200) | NOT NULL | Название |
-| contact_phone | VARCHAR(20) |  | Контактный телефон |
-| contact_email | VARCHAR(100) |  | Email |
+| contact_phone | VARCHAR(20) | NOT NULL | Контактный телефон |
+| contact_email | VARCHAR(100) | NOT NULL | Email |
 
 ## TECHNICH (Медицинское оборудование)
 
