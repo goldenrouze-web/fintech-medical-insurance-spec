@@ -1,8 +1,5 @@
 
-
-# Medical Insurance Database
-
-## KLIENT (Клиенты)
+## СLIENT (Клиенты)
 
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
@@ -33,7 +30,7 @@
 | tech_name | VARCHAR(150) | NOT NULL | Наименование |
 | description | TEXT |  | Характеристики |
 
-## VRACH (Врачи)
+## DOCTOR (Врачи)
 
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
@@ -68,7 +65,7 @@
 | polis_id | INT | PRIMARY KEY, FOREIGN KEY REFERENCES POLIS(polis_id) | ID полиса |
 | tech_id | INT | PRIMARY KEY, FOREIGN KEY REFERENCES TECHNICH(tech_id) | ID оборудования |
 
-## POLIS_VRACH (Связь полис-врач)
+## POLIS_DOCTOR (Связь полис-врач)
 
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
