@@ -5,9 +5,9 @@ CREATE TABLE СLIENT (
     middle_name VARCHAR(100),
     email VARCHAR(100) NOT NULL UNIQUE,
     birth_date DATE NOT NULL,
-    phone VARCHAR(20),
-    birth_place VARCHAR(200),
-    citizenship VARCHAR(50)
+    phone VARCHAR(20) NOT NULL,
+    birth_place VARCHAR(200) NOT NULL,
+    citizenship VARCHAR(50) NOT NULL
 );
 
 INSERT INTO СLIENT (first_name, last_name, middle_name, email, birth_date, phone, birth_place, citizenship)
@@ -22,8 +22,8 @@ RETURNING client_id;
 CREATE TABLE INSURANCE (
     insurance_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     insurance_name VARCHAR(200) NOT NULL,
-    contact_phone VARCHAR(20),
-    contact_email VARCHAR(100)
+    contact_phone VARCHAR(20) NOT NULL,
+    contact_email VARCHAR(100) NOT NULL UNIQUE
 );
 
 INSERT INTO INSURANCE (insurance_name, contact_phone, contact_email)
@@ -55,7 +55,7 @@ CREATE TABLE DOCTOR (
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     specialization VARCHAR(150),
-    license_number VARCHAR(50) NOT NULL
+    license_number VARCHAR(50) NOT NULL UNIQUE
 );
 
 INSERT INTO DOCTOR (first_name, last_name, specialization, license_number)
@@ -72,7 +72,7 @@ CREATE TABLE POLIS (
     polis_number VARCHAR(50) NOT NULL,
     issue_date DATE NOT NULL,
     expiry_date DATE NOT NULL,
-    status VARCHAR(20),
+    status VARCHAR(9),
     client_id UUID NOT NULL REFERENCES СLIENT(client_id) ON DELETE CASCADE,
     CONSTRAINT chk_policy_dates CHECK (issue_date < expiry_date)
 );
