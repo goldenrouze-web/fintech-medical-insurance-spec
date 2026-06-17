@@ -10,7 +10,7 @@
 | birth_date | DATE | NOT NULL | Дата рождения |
 | phone | VARCHAR(20) | NOT NULL | Телефон |
 | email | VARCHAR(100) | NOT NULL, UNIQUE | Email |
-| birth_place | VARCHAR(200) | | Место рождения |
+| birth_place | VARCHAR(200) | NOT NULL | Место рождения |
 | citizenship | VARCHAR(50) | NOT NULL | Гражданство |
 
 ## INSURANCE (Страховые компании)
@@ -19,15 +19,15 @@
 |------|------|-------------|-----------|
 | insurance_id | INT | PRIMARY KEY AUTO_INCREMENT | ID страховой компании |
 | insurance_name | VARCHAR(200) | NOT NULL, UNIQUE | Название |
-| contact_phone | VARCHAR(20) | | Контактный телефон |
-| contact_email | VARCHAR(100) | | Email |
+| contact_phone | VARCHAR(20) | NOT NULL | Контактный телефон |
+| contact_email | VARCHAR(100) | NOT NULL, UNIQUE | Email |
 
 ## TECHNICH (Медицинское оборудование)
 
 | Поле | Тип | Ограничения | Описание |
 |------|------|-------------|-----------|
 | tech_id | INT | PRIMARY KEY AUTO_INCREMENT | ID оборудования |
-| tech_name | VARCHAR(150) | NOT NULL, UNIQUE | Наименование |
+| tech_name | VARCHAR(150) | NOT NULL | Наименование |
 | description | TEXT | | Характеристики |
 
 ## DOCTOR (Врачи)
