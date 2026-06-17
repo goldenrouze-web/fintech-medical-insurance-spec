@@ -48,7 +48,7 @@
 | polis_number | VARCHAR(50) | NOT NULL, UNIQUE | Номер полиса |
 | issue_date | DATE | NOT NULL | Дата выдачи |
 | expiry_date | DATE | NOT NULL | Дата окончания |
-| status | VARCHAR(20) | CHECK (status IN ('active', 'expired', 'cancelled')) | Статус |
+| status | VARCHAR(9) | NOT NULL, CHECK (status IN ('active', 'expired', 'cancelled')) | Статус |
 | client_id | INT | NOT NULL, FOREIGN KEY REFERENCES CLIENT(client_id) | ID клиента |
 
 ## POLIS_INSURANCE (Связь полис-страховая компания)
