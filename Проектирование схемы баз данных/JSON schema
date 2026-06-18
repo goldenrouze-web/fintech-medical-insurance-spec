@@ -2,61 +2,86 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["client", "polis"],
+  "required": [
+    "client"
+  ],
   "properties": {
     "client": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["client_id", "surname", "first_name", "birth_date"],
+      "required": [
+        "client_id",
+        "surname",
+        "first_name",
+        "birth_date"
+      ],
       "properties": {
         "client_id": {
           "type": "string",
           "description": "Уникальный идентификатор клиента (ObjectId)",
-          "examples": ["5f8a3b2c1e9f0d8c7b6a5f4e"]
+          "examples": [
+            "5f8a3b2c1e9f0d8c7b6a5f4e"
+          ]
         },
         "surname": {
           "type": "string",
           "minLength": 1,
           "description": "Фамилия клиента",
-          "examples": ["Иванов"]
+          "examples": [
+            "Иванов"
+          ]
         },
         "first_name": {
           "type": "string",
           "minLength": 1,
           "description": "Имя клиента",
-          "examples": ["Иван"]
+          "examples": [
+            "Иван"
+          ]
         },
         "middle_name": {
           "type": "string",
           "description": "Отчество клиента",
-          "examples": ["Иванович"]
+          "examples": [
+            "Иванович"
+          ]
         },
         "birth_date": {
           "type": "string",
           "format": "date",
           "description": "Дата рождения клиента",
-          "examples": ["1985-03-10"]
+          "examples": [
+            "1985-03-10"
+          ]
         },
         "phone": {
           "type": "string",
           "description": "Номер телефона клиента",
-          "examples": ["+79123456789"]
+          "examples": [
+            "+79123456789"
+          ]
         },
         "email": {
           "type": "string",
           "format": "email",
           "description": "Электронная почта клиента",
-          "examples": ["client@example.com"]
+          "examples": [
+            "client@example.com"
+          ]
         },
         "birth_place": {
           "type": "string",
           "description": "Место рождения клиента",
-          "examples": ["г. Москва"]
+          "examples": [
+            "г. Москва"
+          ]
         },
         "citizenship": {
           "type": "string",
           "description": "Гражданство клиента",
-          "examples": ["РФ"]
+          "examples": [
+            "РФ"
+          ]
         },
         "polis": {
           "type": "array",
@@ -66,137 +91,190 @@
           "description": "Список полисов клиента"
         }
       }
-    },
-    "polis": {
-      "$ref": "#/$defs/polis"
     }
   },
   "$defs": {
     "insurance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["insurance_id", "insurance_name"],
+      "required": [
+        "insurance_id",
+        "insurance_name"
+      ],
       "properties": {
         "insurance_id": {
           "type": "string",
           "description": "Уникальный идентификатор страховой компании (ObjectId)",
-          "examples": ["61b2c3d4e5f6g7h8i9j0k1l2"]
+          "examples": [
+            "61b2c3d4e5f6g7h8i9j0k1l2"
+          ]
         },
         "insurance_name": {
           "type": "string",
           "minLength": 1,
           "description": "Название страховой компании",
-          "examples": ["Страховая компания Альфа"]
+          "examples": [
+            "Страховая компания Альфа"
+          ]
         },
         "contact_phone": {
           "type": "string",
           "description": "Контактный телефон страховой компании",
-          "examples": ["+74951234567"]
+          "examples": [
+            "+74951234567"
+          ]
         },
         "contact_email": {
           "type": "string",
           "format": "email",
           "description": "Электронная почта страховой компании",
-          "examples": ["info@alpha-insurance.com"]
+          "examples": [
+            "info@alpha-insurance.com"
+          ]
         }
       }
     },
     "program": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tech_id", "tech_name"],
+      "required": [
+        "tech_id",
+        "tech_name"
+      ],
       "properties": {
         "tech_id": {
           "type": "string",
           "description": "Уникальный идентификатор программы (ObjectId)",
-          "examples": ["62c3d4e5f6g7h8i9j0k1l2m3"]
+          "examples": [
+            "62c3d4e5f6g7h8i9j0k1l2m3"
+          ]
         },
         "tech_name": {
           "type": "string",
           "minLength": 1,
           "description": "Название программы",
-          "examples": ["Программа ДМС Стандарт"]
+          "examples": [
+            "Программа ДМС Стандарт"
+          ]
         },
         "description": {
           "type": "string",
           "description": "Описание программы",
-          "examples": ["Базовая программа добровольного медицинского страхования"]
+          "examples": [
+            "Базовая программа добровольного медицинского страхования"
+          ]
         }
       }
     },
     "doctor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["doctor_id", "surname", "first_name", "specialization"],
+      "required": [
+        "doctor_id",
+        "surname",
+        "first_name",
+        "specialization"
+      ],
       "properties": {
         "doctor_id": {
           "type": "string",
           "description": "Уникальный идентификатор врача (ObjectId)",
-          "examples": ["63d4e5f6g7h8i9j0k1l2m3n4"]
+          "examples": [
+            "63d4e5f6g7h8i9j0k1l2m3n4"
+          ]
         },
         "surname": {
           "type": "string",
           "minLength": 1,
           "description": "Фамилия врача",
-          "examples": ["Петров"]
+          "examples": [
+            "Петров"
+          ]
         },
         "first_name": {
           "type": "string",
           "minLength": 1,
           "description": "Имя врача",
-          "examples": ["Петр"]
+          "examples": [
+            "Петр"
+          ]
         },
         "specialization": {
           "type": "string",
           "minLength": 1,
           "description": "Специализация врача",
-          "examples": ["Терапевт"]
+          "examples": [
+            "Терапевт"
+          ]
         },
         "license_number": {
           "type": "string",
           "minLength": 1,
           "description": "Номер лицензии врача",
-          "examples": ["LIC-987654321"]
+          "examples": [
+            "LIC-987654321"
+          ]
         }
       }
     },
     "polis": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["polis_id", "polis_number", "issue_date", "expiry_date", "status", "client_id"],
+      "required": [
+        "polis_id",
+        "polis_number",
+        "issue_date",
+        "expiry_date",
+        "status",
+        "client_id"
+      ],
       "properties": {
         "polis_id": {
           "type": "string",
           "description": "Уникальный идентификатор полиса (ObjectId)",
-          "examples": ["60a1b2c3d4e5f6g7h8i9j0k1"]
+          "examples": [
+            "60a1b2c3d4e5f6g7h8i9j0k1"
+          ]
         },
         "polis_number": {
           "type": "string",
           "minLength": 1,
           "description": "Номер полиса",
-          "examples": ["POL-123456789"]
+          "examples": [
+            "POL-123456789"
+          ]
         },
         "issue_date": {
           "type": "string",
           "format": "date",
           "description": "Дата выдачи полиса",
-          "examples": ["2023-01-15"]
+          "examples": [
+            "2023-01-15"
+          ]
         },
         "expiry_date": {
           "type": "string",
           "format": "date",
           "description": "Дата окончания действия полиса",
-          "examples": ["2024-01-15"]
+          "examples": [
+            "2024-01-15"
+          ]
         },
         "status": {
           "type": "string",
           "description": "Статус полиса",
-          "enum": ["active", "expired", "cancelled"]
+          "enum": [
+            "active",
+            "expired",
+            "cancelled"
+          ]
         },
         "client_id": {
           "type": "string",
           "description": "Идентификатор клиента, которому принадлежит полис",
-          "examples": ["5f8a3b2c1e9f0d8c7b6a5f4e"]
+          "examples": [
+            "5f8a3b2c1e9f0d8c7b6a5f4e"
+          ]
         },
         "insurance": {
           "type": "array",
@@ -213,8 +291,10 @@
           "description": "Список программ, охватываемых полисом"
         },
         "doctor": {
-          "$ref": "#/$defs/doctor",
-          "description": "Врач, назначенный по полису"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/doctor"
+          }
         }
       }
     }
