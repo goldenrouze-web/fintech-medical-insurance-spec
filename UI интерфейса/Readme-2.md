@@ -25,7 +25,7 @@
 
 ## Макет пользовательского интерфейса
 
-echo -e "\n![Диаграмма UI](UI%20интерфейса/ДиаграммаUI.drawio.png)" >> README.md
+![Диаграмма UI](https://github.com/goldenrouze-web/fintech-medical-insurance-spec/main/UI%20интерфейса/ДиаграммаUI.drawio.png)
 
 ---
 
