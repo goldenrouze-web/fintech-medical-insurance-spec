@@ -25,7 +25,7 @@
 
 ## Макет пользовательского интерфейса
 
-![Диаграмма UI](https://github.com/goldenrouze-web/fintech-medical-insurance-spec/main/UI%20интерфейса/ДиаграммаUI.drawio.png)
+![Диаграмма UI](./ДиаграммаUI.drawio.png)
 
 ---
 
